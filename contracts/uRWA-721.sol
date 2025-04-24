@@ -3,7 +3,10 @@ pragma solidity ^0.8.29;
 
 import {IuRWA} from "./interfaces/IuRWA.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {ERC721Utils} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Utils.sol";
+
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
@@ -53,7 +56,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param account The address whose whitelist status is to be changed. Must not be the zero address.
     /// @param status The new whitelist status (true = whitelisted, false = not whitelisted).
     function changeWhitelist(address account, bool status) external virtual onlyRole(WHITELIST_ROLE) {
-        require(initialAdmin != address(0), NotZeroAddress());
+        require(account != address(0), NotZeroAddress());
         isWhitelisted[account] = status;
         emit Whitelisted(account, status);
     }
@@ -74,7 +77,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
         
-        ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, data);
+        ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, "");
         emit Recalled(from, to, tokenId);
     }
 
@@ -130,10 +133,16 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @dev Overrides the ERC20 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
     /// Reverts with {TransferNotAllowed} or {UserNotAllowed} if checks fail.
-    /// @param from The address sending tokens (zero address for minting).
+    /// @param auth The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param value The amount being transferred.
-    function _update(address from, address to, uint256 value) internal virtual override {
+    function _update(address to, uint256 value, address auth) internal virtual override returns(address) {
+        address from = _ownerOf(value);
+
+        if (auth != address(0)) {
+            _checkAuthorized(from, auth, value);
+        }
+
         if (from != address(0) && to != address(0)) { // Transfer
             require(isTransferAllowed(from, to, value), TransferNotAllowed(from, to, value));
         } else if (from == address(0)) { // Mint
@@ -142,7 +151,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
             require(isUserAllowed(from), UserNotAllowed(from));
         }
 
-        super._update(from, to, value);
+        return super._update(to, value, from);
     }
 
     /// @notice See {IERC165-supportsInterface}.
