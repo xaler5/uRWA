@@ -12,7 +12,7 @@ requires: EIP-165
 
 ## Abstract
 
-This EIP proposes "Asteroid RWA" (uRWA), a minimal standard interface for both ERC-20 and ERC-721 based tokens, meant to be the primitive for the different classes of Real World Assets. It defines essential functions and events for regulatory compliance and enforcement actions common to RWAs.
+This EIP proposes "Universal RWA" (uRWA) standard, a minimal interface for both ERC-20 and ERC-721 based tokens, meant to be the primitive for the different classes of Real World Assets. It defines essential functions and events for regulatory compliance and enforcement actions common to RWAs.
 
 ## Motivation
 
