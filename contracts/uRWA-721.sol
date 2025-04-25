@@ -126,7 +126,10 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// Emits a {Transfer} event with `to` set to the zero address.
     /// @param tokenId The specific token identifier to burn.
     function burn(uint256 tokenId) external virtual onlyRole(BURNER_ROLE) {
-        _burn(tokenId);
+        address previousOwner = _update(address(0), tokenId, _msgSender());
+        if (previousOwner == address(0)) {
+            revert ERC721NonexistentToken(tokenId);
+        }
     }
 
     /// @notice Hook that is called before any token transfer, including minting and burning.
@@ -151,7 +154,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
             require(isUserAllowed(from), UserNotAllowed(from));
         }
 
-        return super._update(to, value, from);
+        return super._update(to, value, auth);
     }
 
     /// @notice See {IERC165-supportsInterface}.

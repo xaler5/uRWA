@@ -11,6 +11,7 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 
 contract MockERC721Receiver is IERC721Receiver {
     bool public shouldReject = false;
@@ -117,15 +118,15 @@ contract uRWA721Test is Test {
     // --- Whitelist Tests ---
 
     function test_Whitelist_ChangeStatus() public {
-        vm.prank(whitelister);
         assertFalse(token.isUserAllowed(otherUser));
-        vm.expectEmit(true, true, true, true);
+        vm.prank(whitelister);
+        vm.expectEmit(true, false, false, true);
         emit uRWA721.Whitelisted(otherUser, true);
         token.changeWhitelist(otherUser, true);
         assertTrue(token.isUserAllowed(otherUser));
 
         vm.prank(whitelister);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, false, false, true);
         emit uRWA721.Whitelisted(otherUser, false);
         token.changeWhitelist(otherUser, false);
         assertFalse(token.isUserAllowed(otherUser));
@@ -137,16 +138,10 @@ contract uRWA721Test is Test {
         token.changeWhitelist(nonWhitelistedUser, true);
     }
 
-    // Note: The check `require(initialAdmin != address(0), NotZeroAddress());` inside changeWhitelist seems incorrect.
-    // It should likely be `require(account != address(0), NotZeroAddress());`
-    // Testing the code as written:
-    function test_Whitelist_ChangeStatus_ZeroAddressCheck_Bug() public {
-         // This test assumes the bug where initialAdmin is checked instead of account
+    function test_Revert_Whitelist_ChangeStatus_ZeroAddress() public {
         vm.prank(whitelister);
-        // It should revert if account is address(0), but currently checks initialAdmin
-        // Since initialAdmin is not address(0) in setUp, this call succeeds unexpectedly
+        vm.expectRevert(uRWA721.NotZeroAddress.selector);
         token.changeWhitelist(address(0), true);
-        assertTrue(token.isWhitelisted(address(0))); // Status is changed for address(0)
     }
 
     function test_Whitelist_IsUserAllowed() public view {
@@ -178,13 +173,13 @@ contract uRWA721Test is Test {
 
     function test_Revert_Mint_ExistingTokenId() public {
         vm.prank(minter);
-        vm.expectRevert(IERC721Errors.ERC721InvalidSender.selector); // Should be ERC721TokenAlreadyMinted but OZ uses InvalidSender in _mint
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidSender.selector,address(0)));
         token.safeMint(user2, TOKEN_ID_1); // Already minted in setUp
     }
 
     function test_Revert_Mint_ToZeroAddress() public {
         vm.prank(minter);
-        vm.expectRevert(IERC721Errors.ERC721InvalidReceiver.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
         token.safeMint(address(0), TOKEN_ID_2);
     }
 
@@ -197,7 +192,7 @@ contract uRWA721Test is Test {
     function test_Revert_Mint_ToContractThatRejects() public {
         receiverContract.setShouldReject(true);
         vm.prank(minter);
-        vm.expectRevert(IERC721Errors.ERC721InvalidReceiver.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(receiverContract)));
         token.safeMint(address(receiverContract), TOKEN_ID_2);
     }
 
@@ -213,7 +208,7 @@ contract uRWA721Test is Test {
         emit IERC721.Transfer(user1, address(0), TOKEN_ID_1);
         token.burn(TOKEN_ID_1);
         assertEq(token.balanceOf(user1), 0);
-        vm.expectRevert(IERC721Errors.ERC721NonexistentToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, TOKEN_ID_1));
         token.ownerOf(TOKEN_ID_1);
     }
 
@@ -226,7 +221,7 @@ contract uRWA721Test is Test {
         emit IERC721.Transfer(user1, address(0), TOKEN_ID_1);
         token.burn(TOKEN_ID_1);
         assertEq(token.balanceOf(user1), 0);
-        vm.expectRevert(IERC721Errors.ERC721NonexistentToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, TOKEN_ID_1));
         token.ownerOf(TOKEN_ID_1);
     }
 
@@ -238,7 +233,7 @@ contract uRWA721Test is Test {
 
     function test_Revert_Burn_BurnerNotOwnerOrApproved() public {
         vm.startPrank(burner); // Burner is not owner or approved
-        vm.expectRevert(IuRWA.UserNotAllowed.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InsufficientApproval.selector, burner, TOKEN_ID_1));
         token.burn(TOKEN_ID_1);
         vm.stopPrank();
     }
@@ -259,7 +254,7 @@ contract uRWA721Test is Test {
 
     function test_Revert_Burn_NonExistentToken() public {
         vm.prank(burner);
-        vm.expectRevert(IERC721Errors.ERC721NonexistentToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
         token.burn(NON_EXISTENT_TOKEN_ID);
     }
 
@@ -304,7 +299,7 @@ contract uRWA721Test is Test {
 
      function test_Revert_Transfer_NotOwnerOrApproved() public {
         vm.prank(user2); // Not owner or approved
-        vm.expectRevert(IERC721Errors.ERC721InsufficientApproval.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InsufficientApproval.selector,user2, TOKEN_ID_1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
@@ -313,19 +308,19 @@ contract uRWA721Test is Test {
         token.approve(user2, TOKEN_ID_1);
 
         vm.prank(user2); // user2 tries to transfer from admin (incorrect owner)
-        vm.expectRevert(IERC721Errors.ERC721IncorrectOwner.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector,admin, TOKEN_ID_1, user1));
         token.transferFrom(admin, user2, TOKEN_ID_1);
     }
 
     function test_Revert_Transfer_NonExistentToken() public {
         vm.prank(user1);
-        vm.expectRevert(IERC721Errors.ERC721NonexistentToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
         token.transferFrom(user1, user2, NON_EXISTENT_TOKEN_ID);
     }
 
     function test_Revert_Transfer_ToZeroAddress() public {
         vm.prank(user1);
-        vm.expectRevert(IERC721Errors.ERC721InvalidReceiver.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
         token.transferFrom(user1, address(0), TOKEN_ID_1);
     }
 
@@ -380,19 +375,19 @@ contract uRWA721Test is Test {
 
     function test_Revert_Recall_NonExistentToken() public {
         vm.prank(recaller);
-        vm.expectRevert(IERC721Errors.ERC721NonexistentToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
         token.recall(user1, user2, NON_EXISTENT_TOKEN_ID);
     }
 
     function test_Revert_Recall_FromIncorrectOwner() public {
         vm.prank(recaller);
-        vm.expectRevert(IERC721Errors.ERC721IncorrectOwner.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector,user2,TOKEN_ID_1,user1));
         token.recall(user2, admin, TOKEN_ID_1); // user2 is not the owner
     }
 
     function test_Revert_Recall_ToZeroAddress() public {
         vm.prank(recaller);
-        vm.expectRevert(IERC721Errors.ERC721InvalidReceiver.selector);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
         token.recall(user1, address(0), TOKEN_ID_1);
     }
 
@@ -411,7 +406,7 @@ contract uRWA721Test is Test {
     }
 
     function test_Interface_SupportsAccessControl() public view {
-        assertTrue(token.supportsInterface(type(AccessControlEnumerable).interfaceId));
+        assertTrue(token.supportsInterface(type(IAccessControlEnumerable).interfaceId));
     }
 
     function test_Interface_DoesNotSupportRandom() public view {
@@ -434,5 +429,29 @@ contract uRWA721Test is Test {
         vm.prank(user1); // Not admin
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ADMIN_ROLE));
         token.grantRole(MINTER_ROLE, user2);
+    }
+
+    // --- isTransferAllowed Tests ---
+
+    function test_IsTransferAllowed_Success() public view {
+        assertTrue(token.isTransferAllowed(user1, user2, TOKEN_ID_1));
+    }
+
+    function test_IsTransferAllowed_Fail_FromNotOwner() public view {
+        assertFalse(token.isTransferAllowed(user2, user1, TOKEN_ID_1)); // user2 is not owner
+    }
+
+    function test_IsTransferAllowed_Fail_NonExistentToken() public view {
+        assertFalse(token.isTransferAllowed(user1, user2, NON_EXISTENT_TOKEN_ID));
+    }
+
+    function test_IsTransferAllowed_Fail_FromNotWhitelisted() public {
+        vm.prank(whitelister);
+        token.changeWhitelist(user1, false); // Remove owner from whitelist
+        assertFalse(token.isTransferAllowed(user1, user2, TOKEN_ID_1));
+    }
+
+    function test_IsTransferAllowed_Fail_ToNotWhitelisted() public view {
+        assertFalse(token.isTransferAllowed(user1, nonWhitelistedUser, TOKEN_ID_1));
     }
 }
