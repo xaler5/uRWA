@@ -1,12 +1,12 @@
 ---
-title: Asteroid - A Primitive and Universal Real World Asset (uRWA) Interface
+title: uRWA - Universal Real World Asset Interface
 description: A minimal standard interface for regulated assets, targeting the broad spectrum of RWAs.
 author: Dario Lo Buglio (@xaler5)
 discussions-to: <URL of forum discussion, GitHub issue, etc.>
 status: Draft
 type: Standards Track
 category: ERC
-created: 2025-04-19
+created: 2025-04-25
 requires: EIP-165
 ---
 
@@ -46,7 +46,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 *   Implementations of this interface (e.g., an ERC-20 or ERC-721 contract) MUST also implement the necessary functions of their chosen base standard (e.g., `IERC20Metadata`, `IERC721Metadata`).
 *   Implementations MUST ensure their internal transfer logic (e.g., within `_update`, `_transfer`, `_mint`, `_burn`) respects the boolean outcomes of `isUserAllowed` and `isTransferAllowed`. Transfers, mints, or burns MUST NOT proceed if these checks indicate the action is disallowed according to the contract's specific policy.
 *   Implementations MUST restrict access to sensitive functions like `recall` using an appropriate access control mechanism (e.g., `onlyOwner`, Role-Based Access Control). The specific mechanism is NOT mandated by this interface standard.
-*   The `recall` function implementation MUST directly manipulate balances or ownership to transfer the asset (`value` interpreted as amount for ERC-20, tokenId for ERC-721) from `from` to `to` either by transfering or burning from `from` and minting to `to`. It MUST perform necessary checks (e.g., sufficient balance/ownership) and MUST emit both the standard `Transfer` event (from the base ERC standard) and the `Recalled` event. It SHOULD bypass standard transfer validation logic enforced by `isTransferAllowed`.
+*   The `recall` function implementation MUST directly manipulate balances or ownership to transfer the asset (`value` interpreted as amount for ERC-20, tokenId for ERC-721) from `from` to `to` either by transfering or burning from `from` and minting to `to`. It MUST perform necessary checks (e.g., sufficient balance/ownership) and MUST emit both the standard `Transfer` event (from the base ERC standard) and the `Recalled` event. It SHOULD bypass standard transfer validation logic, including checks enforced by `isTransferAllowed` and `isUserAllowed(to)`.
 *   The `isUserAllowed` and `isTransferAllowed` functions provide views into the implementing contract's compliance and transfer policy logic. The exact implementation of these checks (e.g., internal allowlist, external calls, complex logic) is NOT mandated by this interface standard. These two functions MUST not revert.
 
 ## Rationale
