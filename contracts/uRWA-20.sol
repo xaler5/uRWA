@@ -3,6 +3,7 @@ pragma solidity ^0.8.29;
 
 import {IuRWA} from "./interfaces/IuRWA.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
@@ -84,7 +85,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IuRWA {
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
     /// @param amount The amount to recall.
-    function recall(address from, address to, uint256 amount) external onlyRole(RECALL_ROLE) {
+    function recall(address from, address to, uint256 amount) public onlyRole(RECALL_ROLE) {
         require(isUserAllowed(to), UserNotAllowed(to));
         // Directly update balances, bypassing overridden _update
         super._update(from, to, amount);
@@ -142,6 +143,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IuRWA {
     /// @return True if the contract implements `interfaceId`, false otherwise.
     function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControlEnumerable, IERC165) returns (bool) {
         return interfaceId == type(IuRWA).interfaceId ||
-               super.supportsInterface(interfaceId);
+            interfaceId == type(IERC20).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 }

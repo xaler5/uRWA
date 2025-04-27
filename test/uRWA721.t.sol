@@ -60,7 +60,7 @@ contract uRWA721Test is Test {
 
     function setUp() public {
         vm.startPrank(admin);
-        token = new uRWA721("uRWA NFT", "URWANFT", admin);
+        token = new uRWA721("uRWA NFT", "uNFT", admin);
 
         // Grant roles
         token.grantRole(MINTER_ROLE, minter);
@@ -69,7 +69,6 @@ contract uRWA721Test is Test {
         token.grantRole(WHITELIST_ROLE, whitelister);
 
         // Whitelist initial users
-        token.grantRole(WHITELIST_ROLE, admin); // Admin can also whitelist
         token.changeWhitelist(admin, true);
         token.changeWhitelist(user1, true);
         token.changeWhitelist(user2, true);
@@ -82,24 +81,18 @@ contract uRWA721Test is Test {
         // Deploy mock receiver
         receiverContract = new MockERC721Receiver();
         vm.prank(admin);
-        token.changeWhitelist(address(receiverContract), true); // Whitelist receiver contract
+        token.changeWhitelist(address(receiverContract), true);
 
         // Mint initial token for tests
         vm.prank(minter);
         token.safeMint(user1, TOKEN_ID_1);
     }
 
-    // --- Helper ---
-    function _mintToken(address to, uint256 tokenId) internal {
-        vm.prank(minter);
-        token.safeMint(to, tokenId);
-    }
-
     // --- Constructor Tests ---
 
     function test_Constructor_SetsNameAndSymbol() public view {
         assertEq(token.name(), "uRWA NFT");
-        assertEq(token.symbol(), "URWANFT");
+        assertEq(token.symbol(), "uNFT");
     }
 
     function test_Constructor_GrantsInitialRoles() public view {
@@ -325,9 +318,6 @@ contract uRWA721Test is Test {
     }
 
     // --- Recall Tests ---
-    // Note: Testing recall based on the potentially flawed implementation in context.
-    // It bypasses the _update hook and doesn't check isUserAllowed(to).
-    // The checkOnERC721Received call is assumed to be removed/fixed.
 
     function test_Recall_Success_WhitelistedToWhitelisted() public {
         vm.prank(recaller);

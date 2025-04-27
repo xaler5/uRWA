@@ -6,7 +6,7 @@ discussions-to: <URL of forum discussion, GitHub issue, etc.>
 status: Draft
 type: Standards Track
 category: ERC
-created: 2025-04-25
+created: 2025-04-27
 requires: EIP-165
 ---
 
@@ -18,9 +18,9 @@ This EIP proposes "Universal RWA" (uRWA) standard, a minimal interface for both 
 
 The tokenization of Real World Assets introduces requirements often absent in purely digital assets, such as regulatory compliance checks, nuanced transfer controls, and potential enforcement actions. Existing token standards, primarily ERC-20 and ERC-721, lack the inherent structure to address these needs directly within the standard itself.
 
-Attempts at defining universal RWA standards historically imposed unnecessary complexity and gas overhead for simpler use cases that do not require the full spectrum of features like granular role-based access control, mandatory on-chain whitelisting, or specific on-chain identity solutions mandated by the standard.
+Attempts at defining universal RWA standards historically imposed unnecessary complexity and gas overhead for simpler use cases that do not require the full spectrum of features like granular role-based access control, mandatory on-chain whitelisting, specific on-chain identity solutions or metadata handling solutions mandated by the standard.
 
-The broad spectrum of RWA classes inherently suggests the need to move away from a one-size-fits-all solution. With the purpose in mind of defining an EIP for it, a minimalistic approach, unopinionated features, and maximally compatible design should be kept in mind.
+The broad spectrum of RWA classes inherently suggests the need to move away from a one-size-fits-all solution. With the purpose in mind of defining an EIP for it, a minimalistic approach, unopinionated features list and maximally compatible design should be kept in mind.
 
 The uRWA standard seeks a more refined balance by defining an essential interface, `IuRWA`, establishing a common ground for interaction regarding compliance and control, without dictating the underlying implementation mechanisms. This allows core token implementations (like ERC-20 or ERC-721) to remain lean while providing standard functions for RWA-specific interactions.
 
@@ -35,19 +35,19 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 *   Defines the standard interface for an uRWA token contract.
 *   MUST inherit `IERC165`.
 *   MUST declare the following functions:
-    *   `recall(address from, address to, uint256 value) external`
-    *   `isTransferAllowed(address from, address to, uint256 value) external view returns (bool allowed)`
-    *   `isUserAllowed(address user) external view returns (bool allowed)`
+    *   `recall(address from, address to, uint256 value) public`
+    *   `isTransferAllowed(address from, address to, uint256 value) public view returns (bool allowed)`
+    *   `isUserAllowed(address user) public view returns (bool allowed)`
 *   MUST define the following event:
     *   `Recalled(address indexed from, address indexed to, uint256 value)`
 *   MUST define the following errors:
     *   `UserNotAllowed(address account)`
     *   `TransferNotAllowed(address from, address to, uint256 value)`
-*   Implementations of this interface (e.g., an ERC-20 or ERC-721 contract) MUST also implement the necessary functions of their chosen base standard (e.g., `IERC20Metadata`, `IERC721Metadata`).
+*   Implementations of this interface (e.g., an ERC-20 or ERC-721 contract) SHOULD also implement the necessary functions of their chosen base standard (e.g., `IERC20Metadata`, `IERC721Metadata`).
 *   Implementations MUST ensure their internal transfer logic (e.g., within `_update`, `_transfer`, `_mint`, `_burn`) respects the boolean outcomes of `isUserAllowed` and `isTransferAllowed`. Transfers, mints, or burns MUST NOT proceed if these checks indicate the action is disallowed according to the contract's specific policy.
 *   Implementations MUST restrict access to sensitive functions like `recall` using an appropriate access control mechanism (e.g., `onlyOwner`, Role-Based Access Control). The specific mechanism is NOT mandated by this interface standard.
 *   The `recall` function implementation MUST directly manipulate balances or ownership to transfer the asset (`value` interpreted as amount for ERC-20, tokenId for ERC-721) from `from` to `to` either by transfering or burning from `from` and minting to `to`. It MUST perform necessary checks (e.g., sufficient balance/ownership) and MUST emit both the standard `Transfer` event (from the base ERC standard) and the `Recalled` event. It SHOULD bypass standard transfer validation logic, including checks enforced by `isTransferAllowed` and `isUserAllowed(to)`.
-*   The `isUserAllowed` and `isTransferAllowed` functions provide views into the implementing contract's compliance and transfer policy logic. The exact implementation of these checks (e.g., internal allowlist, external calls, complex logic) is NOT mandated by this interface standard. These two functions MUST not revert.
+*   The `isUserAllowed` and `isTransferAllowed` functions provide views into the implementing contract's compliance and transfer policy logic. The exact implementation of these checks (e.g., internal allowlist, external calls, complex logic) is NOT mandated by this interface standard. These two functions MUST NOT revert.
 
 ## Rationale
 

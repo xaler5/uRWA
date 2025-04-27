@@ -1,9 +1,10 @@
 {
-    "name": "erwa-standard-implementation",
+    "name": "urwa-standard-implementation",
     "version": "0.0.1",
-    "description": "A minimal token standard interface for real-world assets.",
+    "description": "A minimal standard interface for regulated assets, targeting the broad spectrum of RWAs.",
     "scripts": {
-      "test": "forge test"
+      "test": "forge test",
+      "coverage": "forge coverage"
     },
     "dependencies": {},
     "devDependencies": {

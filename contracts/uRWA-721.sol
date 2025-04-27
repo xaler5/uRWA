@@ -4,7 +4,6 @@ pragma solidity ^0.8.29;
 import {IuRWA} from "./interfaces/IuRWA.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Utils} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Utils.sol";
-
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
@@ -71,7 +70,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param from The address from which `tokenId` is taken. Must be the current owner.
     /// @param to The address that receives `tokenId`. Must not be the zero address.
     /// @param tokenId The specific token identifier to recall. Must exist.
-    function recall(address from, address to, uint256 tokenId) external virtual override onlyRole(RECALL_ROLE) {
+    function recall(address from, address to, uint256 tokenId) public virtual override onlyRole(RECALL_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
