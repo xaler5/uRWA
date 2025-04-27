@@ -1,4 +1,6 @@
 node_modules
+coverage
+lcov.info
 lib
 cache
 out

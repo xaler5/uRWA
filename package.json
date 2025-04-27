@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "description": "A minimal standard interface for regulated assets, targeting the broad spectrum of RWAs.",
     "scripts": {
+      "build": "forge build",
       "test": "forge test",
       "coverage": "forge coverage"
     },
