@@ -70,14 +70,14 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param from The address from which `tokenId` is taken. Must be the current owner.
     /// @param to The address that receives `tokenId`. Must not be the zero address.
     /// @param tokenId The specific token identifier to recall. Must exist.
-    function recall(address from, address to, uint256 tokenId) public virtual override onlyRole(RECALL_ROLE) {
+    function recall(address from, address to, uint256, uint256 tokenId) public virtual override onlyRole(RECALL_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
         
         ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, "");
-        emit Recalled(from, to, tokenId);
+        emit Recalled(from, to, 1,  tokenId);
     }
 
     /// @notice Checks if a specific user is allowed to interact with the token based on the whitelist.
@@ -98,7 +98,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param to The address receiving the token.
     /// @param tokenId The specific token identifier being transferred.
     /// @return allowed True if the transfer is allowed, false otherwise.
-    function isTransferAllowed(address from, address to, uint256 tokenId) public view virtual override returns (bool allowed) {
+    function isTransferAllowed(address from, address to, uint256, uint256 tokenId) public view virtual override returns (bool allowed) {
         if (_ownerOf(tokenId) != from || _ownerOf(tokenId) == address(0)) return false; // Use internal function to avoid reverting for non existing tokenIds
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
         // if (!_isAuthorized(from, _msgSender(), tokenId)) return false; // This check only makes sense whenever the transfer is being performed by a third party
@@ -132,7 +132,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice Hook that is called before any token transfer, including minting and burning.
-    /// @dev Overrides the ERC20 `_update` hook. Enforces transfer restrictions based on
+    /// @dev Overrides the ERC721 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
     /// Reverts with {TransferNotAllowed} or {UserNotAllowed} if checks fail.
     /// @param auth The address sending tokens (zero address for minting).
@@ -146,7 +146,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
         }
 
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, value), TransferNotAllowed(from, to, value));
+            require(isTransferAllowed(from, to, 1, value), TransferNotAllowed(from, to, 1, value));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), UserNotAllowed(to));
         } else { // Burn --> do we need to check is from isUserAllowed ?
