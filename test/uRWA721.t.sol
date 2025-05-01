@@ -2,7 +2,7 @@
 pragma solidity ^0.8.29;
 
 import {Test, console} from "forge-std/Test.sol";
-import {uRWA721} from "../contracts/uRWA-721.sol";
+import {uRWA721} from "../contracts/uRWA721.sol";
 import {IuRWA} from "../contracts/interfaces/IuRWA.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
@@ -280,13 +280,13 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, user2, 1, TOKEN_ID_1));
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, user2, TOKEN_ID_1, 1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
     function test_Revert_Transfer_ToNotWhitelisted() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, nonWhitelistedUser, 1, TOKEN_ID_1));
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, nonWhitelistedUser, TOKEN_ID_1, 1));
         token.transferFrom(user1, nonWhitelistedUser, TOKEN_ID_1);
     }
 
@@ -324,8 +324,8 @@ contract uRWA721Test is Test {
         vm.expectEmit(true, true, true, true); // Transfer event from super._update
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, user2, 1, TOKEN_ID_1);
-        token.recall(user1, user2, 1, TOKEN_ID_1);
+        emit IuRWA.Recalled(user1, user2, TOKEN_ID_1, 1);
+        token.recall(user1, user2, TOKEN_ID_1, 1);
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
@@ -339,8 +339,8 @@ contract uRWA721Test is Test {
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, user2, 1, TOKEN_ID_1);
-        token.recall(user1, user2, 1, TOKEN_ID_1); // Succeeds as 'from' whitelist status is not checked
+        emit IuRWA.Recalled(user1, user2, TOKEN_ID_1, 1);
+        token.recall(user1, user2, TOKEN_ID_1, 1); // Succeeds as 'from' whitelist status is not checked
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
@@ -351,8 +351,8 @@ contract uRWA721Test is Test {
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, nonWhitelistedUser, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, nonWhitelistedUser, 1, TOKEN_ID_1);
-        token.recall(user1, nonWhitelistedUser, 1, TOKEN_ID_1); // Succeeds as 'to' whitelist status is not checked by recall
+        emit IuRWA.Recalled(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
+        token.recall(user1, nonWhitelistedUser, TOKEN_ID_1, 1); // Succeeds as 'to' whitelist status is not checked by recall
         assertEq(token.ownerOf(TOKEN_ID_1), nonWhitelistedUser);
     }
 
@@ -360,25 +360,25 @@ contract uRWA721Test is Test {
     function test_Revert_Recall_NotRecaller() public {
         vm.prank(user1); // Not recaller
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, RECALL_ROLE));
-        token.recall(user1, user2, 1, TOKEN_ID_1);
+        token.recall(user1, user2, TOKEN_ID_1, 1);
     }
 
     function test_Revert_Recall_NonExistentToken() public {
         vm.prank(recaller);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
-        token.recall(user1, user2, 1, NON_EXISTENT_TOKEN_ID);
+        token.recall(user1, user2, NON_EXISTENT_TOKEN_ID, 1);
     }
 
     function test_Revert_Recall_FromIncorrectOwner() public {
         vm.prank(recaller);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector,user2,TOKEN_ID_1,user1));
-        token.recall(user2, admin, 1, TOKEN_ID_1); // user2 is not the owner
+        token.recall(user2, admin, TOKEN_ID_1, 1); // user2 is not the owner
     }
 
     function test_Revert_Recall_ToZeroAddress() public {
         vm.prank(recaller);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
-        token.recall(user1, address(0), 1, TOKEN_ID_1);
+        token.recall(user1, address(0), TOKEN_ID_1, 1);
     }
 
     // --- Interface Support Tests ---
@@ -424,24 +424,24 @@ contract uRWA721Test is Test {
     // --- isTransferAllowed Tests ---
 
     function test_IsTransferAllowed_Success() public view {
-        assertTrue(token.isTransferAllowed(user1, user2, 1, TOKEN_ID_1));
+        assertTrue(token.isTransferAllowed(user1, user2, TOKEN_ID_1, 1));
     }
 
     function test_IsTransferAllowed_Fail_FromNotOwner() public view {
-        assertFalse(token.isTransferAllowed(user2, user1, 1, TOKEN_ID_1)); // user2 is not owner
+        assertFalse(token.isTransferAllowed(user2, user1, TOKEN_ID_1, 1)); // user2 is not owner
     }
 
     function test_IsTransferAllowed_Fail_NonExistentToken() public view {
-        assertFalse(token.isTransferAllowed(user1, user2, 1, NON_EXISTENT_TOKEN_ID));
+        assertFalse(token.isTransferAllowed(user1, user2, NON_EXISTENT_TOKEN_ID, 1));
     }
 
     function test_IsTransferAllowed_Fail_FromNotWhitelisted() public {
         vm.prank(whitelister);
         token.changeWhitelist(user1, false); // Remove owner from whitelist
-        assertFalse(token.isTransferAllowed(user1, user2, 1, TOKEN_ID_1));
+        assertFalse(token.isTransferAllowed(user1, user2, TOKEN_ID_1, 1));
     }
 
     function test_IsTransferAllowed_Fail_ToNotWhitelisted() public view {
-        assertFalse(token.isTransferAllowed(user1, nonWhitelistedUser, 1, TOKEN_ID_1));
+        assertFalse(token.isTransferAllowed(user1, nonWhitelistedUser, TOKEN_ID_1, 1));
     }
 }

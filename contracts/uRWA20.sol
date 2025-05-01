@@ -85,11 +85,11 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IuRWA {
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
     /// @param amount The amount to recall.
-    function recall(address from, address to, uint256 amount, uint256) public onlyRole(RECALL_ROLE) {
+    function recall(address from, address to, uint256, uint256 amount) public onlyRole(RECALL_ROLE) {
         require(isUserAllowed(to), UserNotAllowed(to));
         // Directly update balances, bypassing overridden _update
         super._update(from, to, amount);
-        emit Recalled(from, to, amount, 0);
+        emit Recalled(from, to, 0, amount);
     }
 
     /// @notice Checks if a transfer is currently possible according to token rules.
@@ -100,7 +100,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IuRWA {
     /// @param to The address receiving tokens.
     /// @param amount The amount being transferred.
     /// @return allowed True if the transfer is allowed, false otherwise.
-    function isTransferAllowed(address from, address to, uint256 amount, uint256) public virtual view returns (bool allowed) {
+    function isTransferAllowed(address from, address to, uint256, uint256 amount) public virtual view returns (bool allowed) {
         if (balanceOf(from) < amount) return false;
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
 
@@ -127,7 +127,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IuRWA {
     /// @param value The amount being transferred.
     function _update(address from, address to, uint256 value) internal virtual override {
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, value, 0), TransferNotAllowed(from, to, value, 0));
+            require(isTransferAllowed(from, to, 0, value), TransferNotAllowed(from, to, 0, value));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), UserNotAllowed(to));
         } else { // Burn --> do we need to check if from isUserAllowed ? 

@@ -86,12 +86,12 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// Emits both a {Recalled} event and a standard {TransferSingle} event.
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
-    /// @param amount The amount to recall.
     /// @param tokenId The ID of the token being recalled.
-    function recall(address from, address to, uint256 amount, uint256 tokenId) public onlyRole(RECALL_ROLE) {
+    /// @param amount The amount to recall.
+    function recall(address from, address to, uint256 tokenId, uint256 amount) public onlyRole(RECALL_ROLE) {
         require(isUserAllowed(to), UserNotAllowed(to));
         _safeTransferFrom(from, to, tokenId, amount, "");
-        emit Recalled(from, to, amount, tokenId);
+        emit Recalled(from, to, tokenId, amount);
     }
 
     /// @notice Checks if a transfer of a specific token is currently possible according to token rules.
@@ -99,10 +99,10 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// and if both `from` and `to` are allowed users according to {isUserAllowed}.
     /// @param from The address sending the token. Must be the owner.
     /// @param to The address receiving the token.
-    /// @param amount The amount being transferred.
     /// @param tokenId The specific token identifier being transferred.
+    /// @param amount The amount being transferred.
     /// @return allowed True if the transfer is allowed, false otherwise.
-    function isTransferAllowed(address from, address to, uint256 amount, uint256 tokenId) public view virtual override returns (bool allowed) {
+    function isTransferAllowed(address from, address to, uint256 tokenId, uint256 amount) public view virtual override returns (bool allowed) {
         if (balanceOf(from, tokenId) < amount) return false;
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
 
@@ -133,7 +133,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
 
         for (uint256 i = 0; i < ids.length; ++i) {
             if (from != address(0) && to != address(0)) { // Transfer
-                require(isTransferAllowed(from, to, values[i], ids[i]), TransferNotAllowed(from, to, values[i], ids[i]));
+                require(isTransferAllowed(from, to, ids[i], values[i]), TransferNotAllowed(from, to, ids[i], values[i]));
             }
         }
 
