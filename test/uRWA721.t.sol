@@ -344,18 +344,13 @@ contract uRWA721Test is Test {
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
-    function test_Recall_Success_WhitelistedToNonWhitelisted() public {
+    function test_Revert_Recall_ToNonWhitelisted() public {
         // Recall to non-whitelisted user
         assertFalse(token.isUserAllowed(nonWhitelistedUser));
         vm.prank(recaller);
-        vm.expectEmit(true, true, true, true); // Transfer event
-        emit IERC721.Transfer(user1, nonWhitelistedUser, TOKEN_ID_1);
-        vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
-        token.recall(user1, nonWhitelistedUser, TOKEN_ID_1, 1); // Succeeds as 'to' whitelist status is not checked by recall
-        assertEq(token.ownerOf(TOKEN_ID_1), nonWhitelistedUser);
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.UserNotAllowed.selector, nonWhitelistedUser));
+        token.recall(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
     }
-
 
     function test_Revert_Recall_NotRecaller() public {
         vm.prank(user1); // Not recaller

@@ -72,6 +72,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param tokenId The specific token identifier to recall. Must exist.
     function recall(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(RECALL_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
+        require(isUserAllowed(to), UserNotAllowed(to));
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
@@ -86,7 +87,9 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param user The address to check.
     /// @return allowed True if the user is whitelisted, false otherwise.
     function isUserAllowed(address user) public view virtual override returns (bool allowed) {
-        return isWhitelisted[user];
+        if (!isWhitelisted[user]) return false;
+        
+        return true;
     }
 
     /// @notice Checks if a transfer of a specific token is currently possible according to token rules.

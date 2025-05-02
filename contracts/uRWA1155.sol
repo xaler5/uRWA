@@ -115,7 +115,9 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// @param user The address to check.
     /// @return allowed True if the user is whitelisted, false otherwise.
     function isUserAllowed(address user) public view virtual override returns (bool allowed) {
-        return isWhitelisted[user];
+        if (!isWhitelisted[user]) return false;
+        
+        return true;
     }
 
     /// @notice Hook that is called before any token transfer, including minting and burning.
