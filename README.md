@@ -9,8 +9,8 @@ The uRWA standard aims to provide essential functionalities for RWAs without imp
 
 *   **Whitelisting:** Control which addresses are allowed to interact with the token (`isUserAllowed`, `changeWhitelist`).
 *   **Transfer Control:** Define rules for when transfers are permitted (`isTransferAllowed`).
-*   **Recall Functionality:** Allow authorized parties to forcibly transfer tokens, often necessary for regulatory compliance (`recall`).
-*   **Access Control:** Utilizes role-based access control (via OpenZeppelin's `AccessControlEnumerable`) to manage permissions for sensitive actions like minting, burning, recalling, and managing the whitelist.
+*   **ForceTransfer Functionality:** Allow authorized parties to forcibly transfer tokens, often necessary for regulatory compliance (`forceTransfer`).
+*   **Access Control:** Utilizes role-based access control (via OpenZeppelin's `AccessControlEnumerable`) to manage permissions for sensitive actions like minting, burning, forced transfers, and managing the whitelist.
 
 ## Implementations
 

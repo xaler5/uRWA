@@ -11,26 +11,26 @@ interface IuRWA is IERC165 {
     /// @param to The address to which seized tokens were transferred.
     /// @param amount The amount seized.
     /// @param tokenId The ID of the token being transferred.
-    event Recalled(address indexed from, address indexed to, uint256 amount, uint256 tokenId);
+    event ForcedTransfer(address indexed from, address indexed to, uint256 amount, uint256 tokenId);
 
     /// @notice Error reverted when a user is not allowed to interact.
     /// @param account The address of the user which is not allowed for interactions.
-    error UserNotAllowed(address account);
+    error ERC1234NotAllowedUser(address account);
 
     /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
     /// @param from The address from which tokens are being transferred.
     /// @param to The address to which tokens are being transferred.
     /// @param amount The amount being transferred.
     /// @param tokenId The ID of the token being transferred. 
-    error TransferNotAllowed(address from, address to, uint256 amount, uint256 tokenId);
+    error ERC1234NotAllowedTransfer(address from, address to, uint256 amount, uint256 tokenId);
 
     /// @notice Takes tokens from one address and transfers them to another.
     /// @dev Requires specific authorization. Used for regulatory compliance or recovery scenarios.
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
-    /// @param amount The amount to recall.
+    /// @param amount The amount to force transfer.
     /// @param tokenId The ID of the token being transferred.
-    function recall(address from, address to, uint256 amount, uint256 tokenId) external;
+    function forceTransfer(address from, address to, uint256 amount, uint256 tokenId) external;
 
     /// @notice Checks if a transfer is currently possible according to token rules and registered plugins.
     /// @dev This may involve checks like allowlists, blocklists, transfer limits, etc.

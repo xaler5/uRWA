@@ -11,12 +11,12 @@ import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions
 /// @title uRWA-1155 Token Contract
 /// @notice An ERC-1155 token implementation adhering to the IuRWA interface for Real World Assets.
 /// @dev Combines standard ERC-1155 functionality with RWA-specific features like whitelisting,
-/// controlled minting/burning, and asset recall, managed via AccessControl. Represents unique and fungible assets.
+/// controlled minting/burning, and asset forced transfers, managed via AccessControl. Represents unique and fungible assets.
 contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// @notice Role identifiers.
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant RECALL_ROLE = keccak256("RECALL_ROLE");
+    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
 
     /// @notice Mapping storing the whitelist status for each user address.
@@ -33,7 +33,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
 
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-1155 token with a URI and grants all roles
-    /// (Admin, Minter, Burner, Recall, Whitelist) to the `initialAdmin`.
+    /// (Admin, Minter, Burner, ForceTransfer, Whitelist) to the `initialAdmin`.
     /// @param uri The URI for the token metadata.
     /// @param initialAdmin The address to receive initial administrative and operational roles. Must not be the zero address.
     constructor(string memory uri, address initialAdmin) ERC1155(uri) {
@@ -41,7 +41,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(MINTER_ROLE, initialAdmin);
         _grantRole(BURNER_ROLE, initialAdmin);
-        _grantRole(RECALL_ROLE, initialAdmin);
+        _grantRole(FORCE_TRANSFER_ROLE, initialAdmin);
         _grantRole(WHITELIST_ROLE, initialAdmin);
     }
 
@@ -65,7 +65,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// @param id The ID of the token to mint.
     /// @param amount The amount of tokens to mint.
     function mint(address to, uint256 id, uint256 amount) external onlyRole(MINTER_ROLE) {
-        require(isUserAllowed(to), UserNotAllowed(to));
+        require(isUserAllowed(to), ERC1234NotAllowedUser(to));
         _mint(to, id, amount, "");
     }
 
@@ -76,22 +76,22 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// @param id The ID of the token to burn.
     /// @param amount The amount of tokens to burn.
     function burn(uint256 id, uint256 amount) external onlyRole(BURNER_ROLE) {
-        require(isUserAllowed(_msgSender()), UserNotAllowed(_msgSender()));
+        require(isUserAllowed(_msgSender()), ERC1234NotAllowedUser(_msgSender()));
         _burn(_msgSender(), id, amount);
     }
 
     /// @notice Takes tokens from one address and transfers them to another, bypassing standard transfer checks.
-    /// @dev Implements the {IuRWA-recall} function. Requires the caller to have the `RECALL_ROLE`.
+    /// @dev Implements the {IuRWA-forceTransfer} function. Requires the caller to have the `FORCE_TRANSFER_ROLE`.
     /// Requires `to` to be allowed according to {isUserAllowed}.
-    /// Emits both a {Recalled} event and a standard {TransferSingle} event.
+    /// Emits both a {ForcedTransfer} event and a standard {TransferSingle} event.
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
-    /// @param tokenId The ID of the token being recalled.
-    /// @param amount The amount to recall.
-    function recall(address from, address to, uint256 tokenId, uint256 amount) public onlyRole(RECALL_ROLE) {
-        require(isUserAllowed(to), UserNotAllowed(to));
+    /// @param tokenId The ID of the token being forcefully transferred.
+    /// @param amount The amount to force transfer.
+    function forceTransfer(address from, address to, uint256 tokenId, uint256 amount) public onlyRole(FORCE_TRANSFER_ROLE) {
+        require(isUserAllowed(to), ERC1234NotAllowedUser(to));
         _safeTransferFrom(from, to, tokenId, amount, "");
-        emit Recalled(from, to, tokenId, amount);
+        emit ForcedTransfer(from, to, tokenId, amount);
     }
 
     /// @notice Checks if a transfer of a specific token is currently possible according to token rules.
@@ -123,7 +123,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
     /// @notice Hook that is called before any token transfer, including minting and burning.
     /// @dev Overrides the ERC-1155 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {TransferNotAllowed} or {UserNotAllowed} if checks fail.
+    /// Reverts with {ERC1234NotAllowedTransfer} or {ERC1234NotAllowedUser} if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param ids The array of ids.
@@ -135,19 +135,18 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IuRWA {
 
         for (uint256 i = 0; i < ids.length; ++i) {
             if (from != address(0) && to != address(0)) { // Transfer
-                require(isTransferAllowed(from, to, ids[i], values[i]), TransferNotAllowed(from, to, ids[i], values[i]));
+                require(isTransferAllowed(from, to, ids[i], values[i]), ERC1234NotAllowedTransfer(from, to, ids[i], values[i]));
             }
         }
 
         if (from == address(0)) { // Mint
-            require(isUserAllowed(to), UserNotAllowed(to));
-        } else if (to == address(0)) { // Burn --> do we need to check if from isUserAllowed ? 
-            require(isUserAllowed(from), UserNotAllowed(from));
+            require(isUserAllowed(to), ERC1234NotAllowedUser(to));
+        } else if (to == address(0)) { // Burn
         }
 
         super._update(from, to, ids, values);
     }
-
+ 
     /// @notice See {IERC165-supportsInterface}.
     /// @dev Indicates support for the {IuRWA} interface in addition to inherited interfaces.
     /// @param interfaceId The interface identifier, as specified in ERC-165.

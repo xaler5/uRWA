@@ -12,12 +12,12 @@ import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions
 /// @title uRWA-721 Token Contract
 /// @notice An ERC-721 token implementation adhering to the IuRWA interface for Real World Assets.
 /// @dev Combines standard ERC-721 functionality with RWA-specific features like whitelisting,
-/// controlled minting/burning, and asset recall, managed via AccessControl. Represents unique assets.
+/// controlled minting/burning, and asset forced transfers, managed via AccessControl. Represents unique assets.
 contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @notice Role identifiers.
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant RECALL_ROLE = keccak256("RECALL_ROLE");
+    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
 
     /// @notice Mapping storing the whitelist status for each user address.
@@ -34,7 +34,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
 
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-721 token with name and symbol, and grants all roles
-    /// (Admin, Minter, Burner, Recall, Whitelist) to the `initialAdmin`.
+    /// (Admin, Minter, Burner, ForceTransfer, Whitelist) to the `initialAdmin`.
     /// @param name The name of the token collection.
     /// @param symbol The symbol of the token collection.
     /// @param initialAdmin The address to receive initial administrative and operational roles. Must not be the zero address.
@@ -43,7 +43,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(MINTER_ROLE, initialAdmin);
         _grantRole(BURNER_ROLE, initialAdmin);
-        _grantRole(RECALL_ROLE, initialAdmin);
+        _grantRole(FORCE_TRANSFER_ROLE, initialAdmin);
         _grantRole(WHITELIST_ROLE, initialAdmin);
 
     }
@@ -61,24 +61,24 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice Takes a specific token from one address and transfers it to another, bypassing standard transfer checks.
-    /// @dev Implements the {IuRWA-recall} function for ERC-721. Requires the caller to have the `RECALL_ROLE`.
+    /// @dev Implements the {IuRWA-forceTransfer} function for ERC-721. Requires the caller to have the `FORCE_TRANSFER_ROLE`.
     /// Requires `to` not be the zero address.
     /// Directly updates ownership using the parent ERC721 `_update` function, bypassing this contract's override.
     /// Verifies that `from` was the actual owner before the update.
     /// Performs an ERC721 receiver check on `to` if it is a contract.
-    /// Emits both a {Recalled} event and a standard {Transfer} event (via `super._update`).
+    /// Emits both a {ForcedTransfer} event and a standard {Transfer} event (via `super._update`).
     /// @param from The address from which `tokenId` is taken. Must be the current owner.
     /// @param to The address that receives `tokenId`. Must not be the zero address.
-    /// @param tokenId The specific token identifier to recall. Must exist.
-    function recall(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(RECALL_ROLE) {
+    /// @param tokenId The specific token identifier to forceTransfer. Must exist.
+    function forceTransfer(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(FORCE_TRANSFER_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
-        require(isUserAllowed(to), UserNotAllowed(to));
+        require(isUserAllowed(to), ERC1234NotAllowedUser(to));
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
         
         ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, "");
-        emit Recalled(from, to, tokenId, 1);
+        emit ForcedTransfer(from, to, tokenId, 1);
     }
 
     /// @notice Checks if a specific user is allowed to interact with the token based on the whitelist.
@@ -137,7 +137,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @notice Hook that is called before any token transfer, including minting and burning.
     /// @dev Overrides the ERC721 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {TransferNotAllowed} or {UserNotAllowed} if checks fail.
+    /// Reverts with {ERC1234NotAllowedTransfer} or {ERC1234NotAllowedUser} if checks fail.
     /// @param auth The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param value The amount being transferred.
@@ -149,11 +149,10 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
         }
 
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, value, 1), TransferNotAllowed(from, to, value, 1));
+            require(isTransferAllowed(from, to, value, 1), ERC1234NotAllowedTransfer(from, to, value, 1));
         } else if (from == address(0)) { // Mint
-            require(isUserAllowed(to), UserNotAllowed(to));
-        } else { // Burn --> do we need to check is from isUserAllowed ?
-            require(isUserAllowed(from), UserNotAllowed(from));
+            require(isUserAllowed(to), ERC1234NotAllowedUser(to));
+        } else { // Burn
         } 
 
         return super._update(to, value, auth);

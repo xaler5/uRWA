@@ -38,7 +38,7 @@ contract uRWA721Test is Test {
     // Roles
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant RECALL_ROLE = keccak256("RECALL_ROLE");
+    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
     bytes32 public constant ADMIN_ROLE = 0x00;
 
@@ -48,7 +48,7 @@ contract uRWA721Test is Test {
     address public user2 = address(3);
     address public minter = address(4);
     address public burner = address(5);
-    address public recaller = address(6);
+    address public forceTransferrer = address(6);
     address public whitelister = address(7);
     address public nonWhitelistedUser = address(8);
     address public otherUser = address(9);
@@ -65,7 +65,7 @@ contract uRWA721Test is Test {
         // Grant roles
         token.grantRole(MINTER_ROLE, minter);
         token.grantRole(BURNER_ROLE, burner);
-        token.grantRole(RECALL_ROLE, recaller);
+        token.grantRole(FORCE_TRANSFER_ROLE, forceTransferrer);
         token.grantRole(WHITELIST_ROLE, whitelister);
 
         // Whitelist initial users
@@ -74,7 +74,7 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user2, true);
         token.changeWhitelist(minter, true);
         token.changeWhitelist(burner, true);
-        token.changeWhitelist(recaller, true);
+        token.changeWhitelist(forceTransferrer, true);
         token.changeWhitelist(whitelister, true);
         vm.stopPrank();
 
@@ -99,7 +99,7 @@ contract uRWA721Test is Test {
         assertTrue(token.hasRole(ADMIN_ROLE, admin));
         assertTrue(token.hasRole(MINTER_ROLE, admin));
         assertTrue(token.hasRole(BURNER_ROLE, admin));
-        assertTrue(token.hasRole(RECALL_ROLE, admin));
+        assertTrue(token.hasRole(FORCE_TRANSFER_ROLE, admin));
         assertTrue(token.hasRole(WHITELIST_ROLE, admin));
     }
 
@@ -160,7 +160,7 @@ contract uRWA721Test is Test {
 
     function test_Revert_Mint_ToNonWhitelisted() public {
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.UserNotAllowed.selector, nonWhitelistedUser));
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedUser.selector, nonWhitelistedUser));
         token.safeMint(nonWhitelistedUser, TOKEN_ID_2);
     }
 
@@ -241,7 +241,6 @@ contract uRWA721Test is Test {
         token.grantRole(BURNER_ROLE, user1);
 
         vm.prank(user1); // Owner (not whitelisted) tries to burn
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.UserNotAllowed.selector, user1));
         token.burn(TOKEN_ID_1);
     }
 
@@ -280,13 +279,13 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, user2, TOKEN_ID_1, 1));
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, user2, TOKEN_ID_1, 1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
     function test_Revert_Transfer_ToNotWhitelisted() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.TransferNotAllowed.selector, user1, nonWhitelistedUser, TOKEN_ID_1, 1));
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, nonWhitelistedUser, TOKEN_ID_1, 1));
         token.transferFrom(user1, nonWhitelistedUser, TOKEN_ID_1);
     }
 
@@ -317,63 +316,63 @@ contract uRWA721Test is Test {
         token.transferFrom(user1, address(0), TOKEN_ID_1);
     }
 
-    // --- Recall Tests ---
+    // --- ForceTransfer Tests ---
 
-    function test_Recall_Success_WhitelistedToWhitelisted() public {
-        vm.prank(recaller);
+    function test_ForceTransfer_Success_WhitelistedToWhitelisted() public {
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true); // Transfer event from super._update
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
-        vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, user2, TOKEN_ID_1, 1);
-        token.recall(user1, user2, TOKEN_ID_1, 1);
+        vm.expectEmit(true, true, true, true); // ForcedTransfer event
+        emit IuRWA.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        token.forceTransfer(user1, user2, TOKEN_ID_1, 1);
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
-    function test_Recall_Success_FromNonWhitelistedToWhitelisted() public {
+    function test_ForceTransfer_Success_FromNonWhitelistedToWhitelisted() public {
         // Remove user1 from whitelist
         vm.prank(whitelister);
         token.changeWhitelist(user1, false);
         assertFalse(token.isUserAllowed(user1));
 
-        vm.prank(recaller);
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
-        vm.expectEmit(true, true, true, true); // Recalled event
-        emit IuRWA.Recalled(user1, user2, TOKEN_ID_1, 1);
-        token.recall(user1, user2, TOKEN_ID_1, 1); // Succeeds as 'from' whitelist status is not checked
+        vm.expectEmit(true, true, true, true); // ForcedTransfer event
+        emit IuRWA.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        token.forceTransfer(user1, user2, TOKEN_ID_1, 1); // Succeeds as 'from' whitelist status is not checked
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
-    function test_Revert_Recall_ToNonWhitelisted() public {
-        // Recall to non-whitelisted user
+    function test_Revert_ForceTransfer_ToNonWhitelisted() public {
+        // ForceTransfer to non-whitelisted user
         assertFalse(token.isUserAllowed(nonWhitelistedUser));
-        vm.prank(recaller);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.UserNotAllowed.selector, nonWhitelistedUser));
-        token.recall(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
+        vm.prank(forceTransferrer);
+        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedUser.selector, nonWhitelistedUser));
+        token.forceTransfer(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
     }
 
-    function test_Revert_Recall_NotRecaller() public {
-        vm.prank(user1); // Not recaller
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, RECALL_ROLE));
-        token.recall(user1, user2, TOKEN_ID_1, 1);
+    function test_Revert_ForceTransfer_NotForceTransferrer() public {
+        vm.prank(user1); // Not forceTransferrer
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, FORCE_TRANSFER_ROLE));
+        token.forceTransfer(user1, user2, TOKEN_ID_1, 1);
     }
 
-    function test_Revert_Recall_NonExistentToken() public {
-        vm.prank(recaller);
+    function test_Revert_ForceTransfer_NonExistentToken() public {
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
-        token.recall(user1, user2, NON_EXISTENT_TOKEN_ID, 1);
+        token.forceTransfer(user1, user2, NON_EXISTENT_TOKEN_ID, 1);
     }
 
-    function test_Revert_Recall_FromIncorrectOwner() public {
-        vm.prank(recaller);
+    function test_Revert_ForceTransfer_FromIncorrectOwner() public {
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector,user2,TOKEN_ID_1,user1));
-        token.recall(user2, admin, TOKEN_ID_1, 1); // user2 is not the owner
+        token.forceTransfer(user2, admin, TOKEN_ID_1, 1); // user2 is not the owner
     }
 
-    function test_Revert_Recall_ToZeroAddress() public {
-        vm.prank(recaller);
+    function test_Revert_ForceTransfer_ToZeroAddress() public {
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
-        token.recall(user1, address(0), TOKEN_ID_1, 1);
+        token.forceTransfer(user1, address(0), TOKEN_ID_1, 1);
     }
 
     // --- Interface Support Tests ---
