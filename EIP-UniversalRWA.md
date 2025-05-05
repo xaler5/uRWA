@@ -93,14 +93,17 @@ interface IuRWA /* is ERC165 */ {
     - MUST directly manipulate balances or ownership to transfer the asset from `from` to `to` either by transferring or burning from `from` and minting to `to`. 
     - MUST perform necessary validation checks (e.g., sufficient balance/ownership of a specific token).
     - MUST emit both the standard `Transfer` event (from the base standard) and the `ForcedTransfer` event. 
-    - SHOULD bypass checks enforced by `isTransferAllowed`.
-    - MUST perform `isUserAllowed` check in the `to` parameter.
+    - MUST bypass checks enforced by `isTransferAllowed`.
+    - MUST perform `isUserAllowed` check in the `recipient` parameter.
 
 Given the agnostic nature of the standard on the specific base token standard being used the implementation SHOULD use `tokenId = 0` for [ERC-20](./eip-20.md) based implementations, and `amount = 1` for [ERC-721](./eip-721.md) based implementations on `ForcedTransfer` event, `ERC1234NotAllowedTransfer` error and `forceTransfer` / `isTransferAllowed` functions. Integrators MAY decide to not enforce this, however the standard discourages it. This is considered a little tradeoff for having a unique standard interface for different token standards without overlapping syntaxes.
 
 Implementations of this interface MUST implement the necessary functions of their chosen base standard (e.g., [ERC-20](./eip-20.md), [ERC-721](./eip-721.md) and [ERC-1155](./eip-1155.md) functionalities) and MUST also restrict access to sensitive functions like `forceTransfer` using an appropriate access control mechanism (e.g., `onlyOwner`, Role-Based Access Control). The specific mechanism is NOT mandated by this interface standard.
 
-Integrators MUST ensure their internal transfer logic (e.g., within `_update`, `_transfer`, `_mint`, `_burn`) respects the boolean outcomes of `isUserAllowed` and `isTransferAllowed`. Transfers, mints, or burns MUST NOT proceed and instead MUST revert with `ERC1234NotAllowedUser` or `ERC1234NotAllowedTransfer` if and only if these checks indicate the action is disallowed according to the contract's specific policy.
+Integrators MUST ensure their transfer methods (`transfer`, `transferFrom`, `mint`, `burn`) respect the following validation logic, meaning that they MUST revert if any of the following validation logics return `false`:
+- Public transfers (`transfer`, `transferFrom`, `safeTransferFrom`) MUST run `isTransferAllowed` and `isUserAllowed` on origin and destination addresses.
+- Minting MUST run `isUserAllowed` on destination address.
+- Burning MUST NOT run `isTransferAllowed` nor `isUserAllowed` on the wallet holding the tokens to burn.
 
 ## Rationale
 
