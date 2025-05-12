@@ -16,9 +16,9 @@ The uRWA standard aims to provide essential functionalities for RWAs without imp
 
 This repository provides three primary implementations:
 
-1.  **[`uRWA-20.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-20.sol):** An ERC-20 compliant token implementing the `IuRWA` interface.
-2.  **[`uRWA-721.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-721.sol):** An ERC-721 compliant token implementing the `IuRWA` interface.
-3.  **[`uRWA-1155.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-1155.sol):** An ERC-1155 compliant token implementing the `IuRWA` interface.
+1.  **[`uRWA-20.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-20.sol):** An ERC-20 compliant token implementing the `IERC7943` interface.
+2.  **[`uRWA-721.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-721.sol):** An ERC-721 compliant token implementing the `IERC7943` interface.
+3.  **[`uRWA-1155.sol`](/home/xaler/workspace/uRWA/contracts/uRWA-1155.sol):** An ERC-1155 compliant token implementing the `IERC7943` interface.
 
 ## EIP Draft
 

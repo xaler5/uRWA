@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import {Test, console} from "forge-std/Test.sol";
 import {uRWA20} from "../contracts/uRWA20.sol";
-import {IuRWA} from "../contracts/interfaces/IuRWA.sol";
+import {IERC7943} from "../contracts/interfaces/IERC7943.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
@@ -140,7 +140,7 @@ contract uRWA20Test is Test {
 
     function test_Revert_Mint_ToNonWhitelisted() public {
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedUser.selector, nonWhitelistedUser));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.mint(nonWhitelistedUser, TRANSFER_AMOUNT);
     }
 
@@ -216,20 +216,20 @@ contract uRWA20Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
         token.transfer(user2, TRANSFER_AMOUNT);
     }
 
     function test_Revert_Transfer_ToNotWhitelisted() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, TRANSFER_AMOUNT));
         token.transfer(nonWhitelistedUser, TRANSFER_AMOUNT);
     }
 
     function test_Revert_Transfer_InsufficientBalance() public {
         vm.prank(user1);
         uint256 transferAmount = INITIAL_MINT_AMOUNT + 1;
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, user2, 0, transferAmount));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, transferAmount));
         token.transfer(user2, transferAmount);
     }
 
@@ -281,7 +281,7 @@ contract uRWA20Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user2);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, user2, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, APPROVE_AMOUNT));
         token.transferFrom(user1, user2, APPROVE_AMOUNT);
     }
 
@@ -290,7 +290,7 @@ contract uRWA20Test is Test {
         token.approve(user2, APPROVE_AMOUNT);
 
         vm.prank(user2);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
         token.transferFrom(user1, nonWhitelistedUser, APPROVE_AMOUNT);
     }
 
@@ -308,7 +308,7 @@ contract uRWA20Test is Test {
         vm.prank(user1);
         token.approve(nonWhitelistedUser, APPROVE_AMOUNT);
         vm.prank(nonWhitelistedUser);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
         token.transferFrom(user1, nonWhitelistedUser, APPROVE_AMOUNT);
     }
 
@@ -328,7 +328,7 @@ contract uRWA20Test is Test {
         token.approve(user2, transferAmount); // Approve more than balance
 
         vm.prank(user2);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedTransfer.selector, user1, otherUser, 0, transferAmount ));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, otherUser, 0, transferAmount ));
         token.transferFrom(user1, otherUser, transferAmount);
     }
 
@@ -352,7 +352,7 @@ contract uRWA20Test is Test {
         vm.expectEmit(true, true, true, true); // Transfer event from super._update
         emit IERC20.Transfer(user1, user2, FORCE_TRANSFER_AMOUNT);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
-        emit IuRWA.ForcedTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
+        emit IERC7943.ForcedTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
 
         token.forceTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
         assertEq(token.balanceOf(user1), user1InitialBalance - FORCE_TRANSFER_AMOUNT);
@@ -372,7 +372,7 @@ contract uRWA20Test is Test {
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC20.Transfer(user1, user2, FORCE_TRANSFER_AMOUNT);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
-        emit IuRWA.ForcedTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
+        emit IERC7943.ForcedTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
 
         token.forceTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT); // Succeeds as 'from' whitelist status is not checked by forceTransfer
         assertEq(token.balanceOf(user1), user1InitialBalance - FORCE_TRANSFER_AMOUNT);
@@ -383,7 +383,7 @@ contract uRWA20Test is Test {
         // force transfer to non-whitelisted user
         assertFalse(token.isUserAllowed(nonWhitelistedUser));
         vm.prank(forceTransferrer);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedUser.selector, nonWhitelistedUser));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.forceTransfer(user1, nonWhitelistedUser, 0, FORCE_TRANSFER_AMOUNT);
     }
 
@@ -403,14 +403,14 @@ contract uRWA20Test is Test {
 
     function test_Revert_ForceTransfer_ToZeroAddress() public {
         vm.prank(forceTransferrer);
-        vm.expectRevert(abi.encodeWithSelector(IuRWA.ERC1234NotAllowedUser.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, address(0)));
         token.forceTransfer(user1, address(0), 0, FORCE_TRANSFER_AMOUNT);
     }
 
     // --- Interface Support Tests ---
 
-    function test_Interface_SupportsIuRWA() public view {
-        assertTrue(token.supportsInterface(type(IuRWA).interfaceId));
+    function test_Interface_SupportsIERC7943() public view {
+        assertTrue(token.supportsInterface(type(IERC7943).interfaceId));
     }
 
     function test_Interface_SupportsIERC20() public view {

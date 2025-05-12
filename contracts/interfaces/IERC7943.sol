@@ -3,9 +3,9 @@ pragma solidity ^0.8.29;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-/// @title Interface for the uRWA Token
+/// @title Interface for the ERC-7943 - uRWA Token
 /// @notice Defines the public functions of the uRWA token.
-interface IuRWA is IERC165 {
+interface IERC7943 is IERC165 {
     /// @notice Emitted when tokens are taken from one address and transferred to another.
     /// @param from The address from which tokens were taken.
     /// @param to The address to which seized tokens were transferred.
@@ -15,14 +15,14 @@ interface IuRWA is IERC165 {
 
     /// @notice Error reverted when a user is not allowed to interact.
     /// @param account The address of the user which is not allowed for interactions.
-    error ERC1234NotAllowedUser(address account);
+    error ERC7943NotAllowedUser(address account);
 
     /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
     /// @param from The address from which tokens are being transferred.
     /// @param to The address to which tokens are being transferred.
     /// @param amount The amount being transferred.
     /// @param tokenId The ID of the token being transferred. 
-    error ERC1234NotAllowedTransfer(address from, address to, uint256 amount, uint256 tokenId);
+    error ERC7943NotAllowedTransfer(address from, address to, uint256 amount, uint256 tokenId);
 
     /// @notice Takes tokens from one address and transfers them to another.
     /// @dev Requires specific authorization. Used for regulatory compliance or recovery scenarios.

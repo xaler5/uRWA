@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
 
-import {IuRWA} from "./interfaces/IuRWA.sol";
+import {IERC7943} from "./interfaces/IERC7943.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Utils} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Utils.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
@@ -10,10 +10,10 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
 /// @title uRWA-721 Token Contract
-/// @notice An ERC-721 token implementation adhering to the IuRWA interface for Real World Assets.
+/// @notice An ERC-721 token implementation adhering to the IERC7943 interface for Real World Assets.
 /// @dev Combines standard ERC-721 functionality with RWA-specific features like whitelisting,
 /// controlled minting/burning, and asset forced transfers, managed via AccessControl. Represents unique assets.
-contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
+contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @notice Role identifiers.
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
@@ -61,7 +61,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice Takes a specific token from one address and transfers it to another, bypassing standard transfer checks.
-    /// @dev Implements the {IuRWA-forceTransfer} function for ERC-721. Requires the caller to have the `FORCE_TRANSFER_ROLE`.
+    /// @dev Implements the {IERC7943-forceTransfer} function for ERC-721. Requires the caller to have the `FORCE_TRANSFER_ROLE`.
     /// Requires `to` not be the zero address.
     /// Directly updates ownership using the parent ERC721 `_update` function, bypassing this contract's override.
     /// Verifies that `from` was the actual owner before the update.
@@ -72,7 +72,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @param tokenId The specific token identifier to forceTransfer. Must exist.
     function forceTransfer(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(FORCE_TRANSFER_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
-        require(isUserAllowed(to), ERC1234NotAllowedUser(to));
+        require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
@@ -82,7 +82,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice Checks if a specific user is allowed to interact with the token based on the whitelist.
-    /// @dev Implements the {IuRWA-isUserAllowed} function. Returns the status from the {isWhitelisted} mapping.
+    /// @dev Implements the {IERC7943-isUserAllowed} function. Returns the status from the {isWhitelisted} mapping.
     /// Does not revert.
     /// @param user The address to check.
     /// @return allowed True if the user is whitelisted, false otherwise.
@@ -93,7 +93,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice Checks if a transfer of a specific token is currently possible according to token rules.
-    /// @dev Implements the {IuRWA-isTransferAllowed} function for ERC-721. Checks if `from` is the owner
+    /// @dev Implements the {IERC7943-isTransferAllowed} function for ERC-721. Checks if `from` is the owner
     /// of `tokenId` and if both `from` and `to` are allowed users according to {isUserAllowed}.
     /// Uses internal `_ownerOf` to avoid reverting for non-existent tokens.
     /// Does not revert.
@@ -137,7 +137,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     /// @notice Hook that is called before any token transfer, including minting and burning.
     /// @dev Overrides the ERC721 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC1234NotAllowedTransfer} or {ERC1234NotAllowedUser} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer} or {ERC7943NotAllowedUser} if checks fail.
     /// @param auth The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param value The amount being transferred.
@@ -149,9 +149,9 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
         }
 
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, value, 1), ERC1234NotAllowedTransfer(from, to, value, 1));
+            require(isTransferAllowed(from, to, value, 1), ERC7943NotAllowedTransfer(from, to, value, 1));
         } else if (from == address(0)) { // Mint
-            require(isUserAllowed(to), ERC1234NotAllowedUser(to));
+            require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         } else { // Burn
         } 
 
@@ -159,11 +159,11 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IuRWA {
     }
 
     /// @notice See {IERC165-supportsInterface}.
-    /// @dev Indicates support for the {IuRWA} interface in addition to inherited interfaces.
+    /// @dev Indicates support for the {IERC7943} interface in addition to inherited interfaces.
     /// @param interfaceId The interface identifier, as specified in ERC-165.
     /// @return True if the contract implements `interfaceId`, false otherwise.
     function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControlEnumerable, ERC721, IERC165) returns (bool) {
-        return interfaceId == type(IuRWA).interfaceId ||
+        return interfaceId == type(IERC7943).interfaceId ||
                super.supportsInterface(interfaceId);
     }
 }
