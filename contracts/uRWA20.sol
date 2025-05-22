@@ -8,33 +8,48 @@ import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 /// @title uRWA-20 Token Contract
-/// @notice An ERC-20 token implementation adhering to the IERC7943 interface for Real World Assets.
+/// @notice An ERC-20 token implementation adhering to the IERC-7943 interface for Real World Assets.
 /// @dev Combines standard ERC-20 functionality with RWA-specific features like whitelisting,
-/// controlled minting/burning, and asset forced transfers, managed via AccessControl.
+/// controlled minting/burning, asset forced transfers, and freezing. Managed via AccessControl.
 contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @notice Role identifiers.
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
+    bytes32 public constant ENFORCER_ROLE = keccak256("ENFORCER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
 
     /// @notice Mapping storing the whitelist status for each user address.
     /// @dev True indicates the user is whitelisted and allowed to interact, false otherwise.
     mapping(address user => bool whitelisted) public isWhitelisted;
 
+    /// @notice Mapping storing the freezing status of assets for each user address.
+    /// @dev It gives the amount of ERC-20 tokens frozen in `user` wallet.
+    mapping(address user => uint256 amount) internal _frozenTokens;
+
     /// @notice Emitted when an account's whitelist status is changed.
     /// @param account The address whose status was changed.
     /// @param status The new whitelist status (true = whitelisted, false = not whitelisted).
     event Whitelisted(address indexed account, bool status);
-
+ 
     /// @notice Error reverted when an operation requires a non-zero address but address(0) was provided.
     error NotZeroAddress();
 
+    /// @notice Error reverted when an operation requires a non-zero amount but 0 was provided.
+    error NotZeroAmount();
+
+    /// @notice Error reverted when a freeze or unfreeze operation is attempted with an invalid amount.
+    /// @param user The address of the user whose tokens are being frozen or unfrozen.
+    /// @param relevantAmount For freezing, this is the user's available (unfrozen) balance.
+    ///                       For unfreezing, this is the user's currently frozen balance.
+    /// @param requestedAmount The amount requested to be frozen or unfrozen.
+    error InvalidFreezeAmount(address user, uint256 relevantAmount, uint256 requestedAmount);
+
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-20 token with name and symbol, and grants all roles
-    /// (Admin, Minter, Burner, ForceTransfer, Whitelist) to the `initialAdmin`.
+    /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
     /// @param name The name of the token.
     /// @param symbol The symbol of the token.
     /// @param initialAdmin The address to receive initial administrative and operational roles.
@@ -43,8 +58,28 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(MINTER_ROLE, initialAdmin);
         _grantRole(BURNER_ROLE, initialAdmin);
-        _grantRole(FORCE_TRANSFER_ROLE, initialAdmin);
+        _grantRole(ENFORCER_ROLE, initialAdmin);
         _grantRole(WHITELIST_ROLE, initialAdmin);
+    }
+
+    /// @inheritdoc IERC7943
+    function isTransferAllowed(address from, address to, uint256, uint256 amount) public virtual view returns (bool allowed) {
+        if (amount > balanceOf(from) - _frozenTokens[from]) return false;
+        if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
+
+        return true;
+    }
+
+    /// @inheritdoc IERC7943
+    function isUserAllowed(address user) public virtual view returns (bool allowed) {
+        if (!isWhitelisted[user]) return false;
+        
+        return true;
+    } 
+
+    /// @inheritdoc IERC7943
+    function freezeStatus(address user, uint256) external view returns (uint256 result) {
+        result = _frozenTokens[user];
     }
 
     /// @notice Updates the whitelist status for a given account.
@@ -70,74 +105,76 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
 
     /// @notice Destroys `amount` tokens from the caller's account.
     /// @dev Can only be called by accounts holding the `BURNER_ROLE`.
-    /// Requires the caller to be allowed according to {isUserAllowed}.
     /// Emits a {Transfer} event with `to` set to the zero address.
     /// @param amount The amount of tokens to burn.
     function burn(uint256 amount) external onlyRole(BURNER_ROLE) {
         _burn(_msgSender(), amount);
     }
 
-    /// @notice Takes tokens from one address and transfers them to another, bypassing standard transfer checks.
-    /// @dev Implements the {IERC7943-forceTransfer} function. Requires the caller to have the `FORCE_TRANSFER_ROLE`.
-    /// Requires `to` to be allowed according to {isUserAllowed}.
-    /// Directly updates balances using the parent ERC20 `_update` function.
-    /// Emits both a {ForcedTransfer} event and a standard {Transfer} event.
-    /// @param from The address from which `amount` is taken.
-    /// @param to The address that receives `amount`.
-    /// @param amount The amount to force transfer.
-    function forceTransfer(address from, address to, uint256, uint256 amount) public onlyRole(FORCE_TRANSFER_ROLE) {
+    /// @inheritdoc IERC7943
+    /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
+    function changeFreezeStatus(address user, uint256, int256 amount) public onlyRole(ENFORCER_ROLE) {
+        if(amount == 0) revert NotZeroAmount();
+        uint256 unsignedAmount = amount > 0 ? uint256(amount) : uint256(-amount);
+
+        if(amount > 0) {
+            _freeze(user, 0, unsignedAmount);
+        } else if (amount < 0) {
+            _unfreeze(user, 0, unsignedAmount);
+        }
+
+        emit FreezeStatusChange(user, 0, amount);
+    }
+
+    /// @inheritdoc IERC7943
+    /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`.
+    function forceTransfer(address from, address to, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
+
         // Directly update balances, bypassing overridden _update
         super._update(from, to, amount);
+
+        // If more than unfrozen amount has been transferred, update frozen amount
+        if(_frozenTokens[from] > balanceOf(from)) _frozenTokens[from] = balanceOf(from);
         emit ForcedTransfer(from, to, 0, amount);
     }
 
-    /// @notice Checks if a transfer is currently possible according to token rules.
-    /// @dev Implements the {IERC7943-isTransferAllowed} function. Checks if `from` has sufficient balance
-    /// and if both `from` and `to` are allowed users according to {isUserAllowed}.
-    /// Does not revert.
-    /// @param from The address sending tokens.
-    /// @param to The address receiving tokens.
-    /// @param amount The amount being transferred.
-    /// @return allowed True if the transfer is allowed, false otherwise.
-    function isTransferAllowed(address from, address to, uint256, uint256 amount) public virtual view returns (bool allowed) {
-        if (balanceOf(from) < amount) return false;
-        if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
-
-        return true;
-    }
-
-    /// @notice Checks if a specific user is allowed to interact with the token based on the whitelist.
-    /// @dev Implements the {IERC7943-isUserAllowed} function. Returns the status from the {isWhitelisted} mapping.
-    /// Does not revert.
-    /// @param user The address to check.
-    /// @return allowed True if the user is whitelisted, false otherwise.
-    function isUserAllowed(address user) public virtual view returns (bool allowed) {
-        if (!isWhitelisted[user]) return false;
+    /// @notice Freezes a specific `amount` of tokens for a `user`.
+    function _freeze(address user, uint256, uint256 amount) internal {
+        uint256 available = balanceOf(user) - _frozenTokens[user];
+        require(amount <= available, InvalidFreezeAmount(user, available, amount));
         
-        return true;
+        _frozenTokens[user] += amount;
     }
 
-    /// @notice Hook that is called before any token transfer, including minting and burning.
+    /// @notice Unfreezes a specific `amount` of tokens for a `user`.
+    function _unfreeze(address user, uint256, uint256 amount) internal {
+        require(_frozenTokens[user] >= amount, InvalidFreezeAmount(user, _frozenTokens[user], amount));
+        _frozenTokens[user] -= amount;
+    } 
+
+    /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC20 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer} or {ERC7943NotAllowedUser} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943Frozen} if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
-    /// @param value The amount being transferred.
-    function _update(address from, address to, uint256 value) internal virtual override {
+    /// @param amount The amount being transferred.
+    function _update(address from, address to, uint256 amount) internal virtual override {
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, 0, value), ERC7943NotAllowedTransfer(from, to, 0, value));
+            require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount)); // isTransferAllowed checks for frozen assets
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else { // Burn
-        }
+        } else { // Burn - Can't burn more than available balance minus frozen tokens
+            uint256 available = balanceOf(from) - _frozenTokens[from];
+            require(amount <= available, ERC7943NotAvailableAmount(from, 0, amount, available));
+        } 
 
-        super._update(from, to, value);
+        super._update(from, to, amount);
     }
 
     /// @notice See {IERC165-supportsInterface}.
-    /// @dev Indicates support for the {IERC7943} interface in addition to inherited interfaces.
+    /// @dev Indicates support for the {IERC-7943} interface in addition to inherited interfaces.
     /// @param interfaceId The interface identifier, as specified in ERC-165.
     /// @return True if the contract implements `interfaceId`, false otherwise.
     function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControlEnumerable, IERC165) returns (bool) {

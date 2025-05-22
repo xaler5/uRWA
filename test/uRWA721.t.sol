@@ -4,32 +4,14 @@ pragma solidity ^0.8.29;
 import {Test, console} from "forge-std/Test.sol";
 import {uRWA721} from "../contracts/uRWA721.sol";
 import {IERC7943} from "../contracts/interfaces/IERC7943.sol";
+import {MockERC721Receiver} from "../contracts/mocks/MockERC721Receiver.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
-
-contract MockERC721Receiver is IERC721Receiver {
-    bool public shouldReject = false;
-    bytes4 public constant ERC721_RECEIVER_MAGIC = bytes4(keccak256("onERC721Received(address,address,uint256,bytes)"));
-
-    function setShouldReject(bool _reject) external {
-        shouldReject = _reject;
-    }
-
-    function onERC721Received(address, address, uint256, bytes memory) public view override returns (bytes4) {
-        if (shouldReject) {
-            return bytes4(0); // Indicate rejection
-        } else {
-            return ERC721_RECEIVER_MAGIC;
-        }
-    }
-}
-
 
 contract uRWA721Test is Test {
     uRWA721 public token;
@@ -38,7 +20,7 @@ contract uRWA721Test is Test {
     // Roles
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
+    bytes32 public constant ENFORCER_ROLE = keccak256("ENFORCER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
     bytes32 public constant ADMIN_ROLE = 0x00;
 
@@ -48,7 +30,7 @@ contract uRWA721Test is Test {
     address public user2 = address(3);
     address public minter = address(4);
     address public burner = address(5);
-    address public forceTransferrer = address(6);
+    address public enforcer = address(6);
     address public whitelister = address(7);
     address public nonWhitelistedUser = address(8);
     address public otherUser = address(9);
@@ -65,7 +47,7 @@ contract uRWA721Test is Test {
         // Grant roles
         token.grantRole(MINTER_ROLE, minter);
         token.grantRole(BURNER_ROLE, burner);
-        token.grantRole(FORCE_TRANSFER_ROLE, forceTransferrer);
+        token.grantRole(ENFORCER_ROLE, enforcer);
         token.grantRole(WHITELIST_ROLE, whitelister);
 
         // Whitelist initial users
@@ -74,7 +56,7 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user2, true);
         token.changeWhitelist(minter, true);
         token.changeWhitelist(burner, true);
-        token.changeWhitelist(forceTransferrer, true);
+        token.changeWhitelist(enforcer, true);
         token.changeWhitelist(whitelister, true);
         vm.stopPrank();
 
@@ -99,7 +81,7 @@ contract uRWA721Test is Test {
         assertTrue(token.hasRole(ADMIN_ROLE, admin));
         assertTrue(token.hasRole(MINTER_ROLE, admin));
         assertTrue(token.hasRole(BURNER_ROLE, admin));
-        assertTrue(token.hasRole(FORCE_TRANSFER_ROLE, admin));
+        assertTrue(token.hasRole(ENFORCER_ROLE, admin));
         assertTrue(token.hasRole(WHITELIST_ROLE, admin));
     }
 
@@ -319,7 +301,7 @@ contract uRWA721Test is Test {
     // --- ForceTransfer Tests ---
 
     function test_ForceTransfer_Success_WhitelistedToWhitelisted() public {
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Transfer event from super._update
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -334,7 +316,7 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user1, false);
         assertFalse(token.isUserAllowed(user1));
 
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -346,33 +328,135 @@ contract uRWA721Test is Test {
     function test_Revert_ForceTransfer_ToNonWhitelisted() public {
         // ForceTransfer to non-whitelisted user
         assertFalse(token.isUserAllowed(nonWhitelistedUser));
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.forceTransfer(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
     }
 
     function test_Revert_ForceTransfer_NotForceTransferrer() public {
-        vm.prank(user1); // Not forceTransferrer
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, FORCE_TRANSFER_ROLE));
+        vm.prank(user1); // Not enforcer
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
         token.forceTransfer(user1, user2, TOKEN_ID_1, 1);
     }
 
     function test_Revert_ForceTransfer_NonExistentToken() public {
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
         token.forceTransfer(user1, user2, NON_EXISTENT_TOKEN_ID, 1);
     }
 
     function test_Revert_ForceTransfer_FromIncorrectOwner() public {
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector,user2,TOKEN_ID_1,user1));
         token.forceTransfer(user2, admin, TOKEN_ID_1, 1); // user2 is not the owner
     }
 
     function test_Revert_ForceTransfer_ToZeroAddress() public {
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector,address(0)));
         token.forceTransfer(user1, address(0), TOKEN_ID_1, 1);
+    }
+
+     // --- Freeze/Unfreeze Tests ---
+
+    function test_Freeze_Success() public {
+        vm.prank(enforcer); // ENFORCER_ROLE
+        vm.expectEmit(true, true, true, false);
+        emit IERC7943.FreezeStatusChange(user1, TOKEN_ID_1, 1);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen");
+    }
+
+    function test_Revert_Freeze_NotEnforcer() public {
+        vm.prank(user1); // Not ENFORCER_ROLE
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+    }
+
+    function test_Revert_Freeze_NotOwner() public {
+        vm.prank(enforcer); // ENFORCER_ROLE
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidOwner.selector, user2));
+        token.changeFreezeStatus(user2, TOKEN_ID_1, 1); // user2 is not owner of TOKEN_ID_1
+    }
+
+    function test_Unfreeze_Success() public {
+        // First, freeze the token
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen initially");
+
+        // Then, unfreeze
+        vm.prank(enforcer); // ENFORCER_ROLE
+        vm.expectEmit(true, true, true, false);
+        emit IERC7943.FreezeStatusChange(user1, TOKEN_ID_1, -1);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
+    }
+
+    function test_Revert_Unfreeze_NotEnforcer() public {
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze first
+
+        vm.prank(user1); // Not ENFORCER_ROLE
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
+        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
+    }
+
+    function test_Revert_Unfreeze_NotOwner() public {
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze first for user1
+
+        vm.prank(enforcer); // ENFORCER_ROLE
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidOwner.selector, user2));
+        token.changeFreezeStatus(user2, TOKEN_ID_1, -1); // user2 is not owner of TOKEN_ID_1
+    }
+
+    function test_FreezeStatus_Correctness() public {
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Initially token should not be frozen");
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen");
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
+    }
+
+    function test_Revert_Transfer_WhenFrozen() public {
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze TOKEN_ID_1 for user1
+
+        vm.prank(user1); // Owner attempts transfer
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, TOKEN_ID_1, 1));
+        token.transferFrom(user1, user2, TOKEN_ID_1);
+    }
+
+    function test_Revert_Burn_WhenFrozen() public {
+        // Grant burner role to user1
+        vm.prank(admin);
+        token.grantRole(BURNER_ROLE, user1);
+
+        // Freeze the token
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+
+        vm.prank(user1); // Owner (and burner) attempts to burn
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, TOKEN_ID_1, 1, 0));
+        token.burn(TOKEN_ID_1);
+    }
+
+    function test_ForceTransfer_UnfreezesToken() public {
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen before force transfer");
+
+        vm.prank(enforcer);
+        token.forceTransfer(user1, user2, TOKEN_ID_1, 1);
+
+        assertEq(token.ownerOf(TOKEN_ID_1), user2, "Owner should be user2 after force transfer");
+        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen for original owner after force transfer");
+        assertEq(token.freezeStatus(user2, TOKEN_ID_1), 0, "Token should not be frozen for new owner");
     }
 
     // --- Interface Support Tests ---

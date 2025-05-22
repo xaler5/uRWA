@@ -11,14 +11,13 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-
 contract uRWA20Test is Test {
     uRWA20 public token;
 
     // Roles
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
+    bytes32 public constant ENFORCER_ROLE = keccak256("ENFORCER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
     bytes32 public constant ADMIN_ROLE = 0x00;
 
@@ -28,7 +27,7 @@ contract uRWA20Test is Test {
     address public user2 = address(3);
     address public minter = address(4);
     address public burner = address(5);
-    address public forceTransferrer = address(6);
+    address public enforcer = address(6);
     address public whitelister = address(7);
     address public nonWhitelistedUser = address(8);
     address public otherUser = address(9);
@@ -39,6 +38,7 @@ contract uRWA20Test is Test {
     uint256 public constant APPROVE_AMOUNT = 50 * 1e18;
     uint256 public constant BURN_AMOUNT = 10 * 1e18;
     uint256 public constant FORCE_TRANSFER_AMOUNT = 20 * 1e18;
+    uint256 public constant FREEZE_AMOUNT = 30 * 1e18;
 
     function setUp() public {
         vm.startPrank(admin);
@@ -47,7 +47,7 @@ contract uRWA20Test is Test {
         // Grant roles
         token.grantRole(MINTER_ROLE, minter);
         token.grantRole(BURNER_ROLE, burner);
-        token.grantRole(FORCE_TRANSFER_ROLE, forceTransferrer);
+        token.grantRole(ENFORCER_ROLE, enforcer);
         token.grantRole(WHITELIST_ROLE, whitelister);
 
         // Whitelist initial users
@@ -56,7 +56,7 @@ contract uRWA20Test is Test {
         token.changeWhitelist(user2, true);
         token.changeWhitelist(minter, true);
         token.changeWhitelist(burner, true);
-        token.changeWhitelist(forceTransferrer, true);
+        token.changeWhitelist(enforcer, true);
         token.changeWhitelist(whitelister, true);
         vm.stopPrank();
 
@@ -77,7 +77,7 @@ contract uRWA20Test is Test {
         assertTrue(token.hasRole(ADMIN_ROLE, admin));
         assertTrue(token.hasRole(MINTER_ROLE, admin));
         assertTrue(token.hasRole(BURNER_ROLE, admin));
-        assertTrue(token.hasRole(FORCE_TRANSFER_ROLE, admin));
+        assertTrue(token.hasRole(ENFORCER_ROLE, admin));
         assertTrue(token.hasRole(WHITELIST_ROLE, admin));
     }
 
@@ -188,12 +188,13 @@ contract uRWA20Test is Test {
 
     function test_Revert_Burn_InsufficientBalance() public {
         // Grant burner role to user1
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
         vm.prank(admin);
         token.grantRole(BURNER_ROLE, user1);
 
         vm.prank(user1);
-        uint256 burnAmount = INITIAL_MINT_AMOUNT + 1; // More than balance
-        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, INITIAL_MINT_AMOUNT, burnAmount));
+        uint256 burnAmount = available + 1; // More than available balance
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, 0, burnAmount, available));
         token.burn(burnAmount);
     }
 
@@ -226,10 +227,10 @@ contract uRWA20Test is Test {
         token.transfer(nonWhitelistedUser, TRANSFER_AMOUNT);
     }
 
-    function test_Revert_Transfer_InsufficientBalance() public {
-        vm.prank(user1);
+    function test_Revert_Transfer_NotAllowedTransfer() public {
         uint256 transferAmount = INITIAL_MINT_AMOUNT + 1;
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, transferAmount));
+        vm.prank(user1);
         token.transfer(user2, transferAmount);
     }
 
@@ -312,7 +313,6 @@ contract uRWA20Test is Test {
         token.transferFrom(user1, nonWhitelistedUser, APPROVE_AMOUNT);
     }
 
-
     function test_Revert_TransferFrom_InsufficientAllowance() public {
         vm.prank(user1);
         token.approve(user2, APPROVE_AMOUNT - 1); // Approve less than needed
@@ -322,13 +322,13 @@ contract uRWA20Test is Test {
         token.transferFrom(user1, otherUser, APPROVE_AMOUNT);
     }
 
-    function test_Revert_TransferFrom_InsufficientBalance() public {
+    function test_Revert_TransferFrom_NotAllowedTransfer() public {
         uint256 transferAmount = INITIAL_MINT_AMOUNT + 1;
         vm.prank(user1);
         token.approve(user2, transferAmount); // Approve more than balance
 
-        vm.prank(user2);
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, otherUser, 0, transferAmount ));
+        vm.prank(user2);
         token.transferFrom(user1, otherUser, transferAmount);
     }
 
@@ -348,7 +348,7 @@ contract uRWA20Test is Test {
         uint256 user1InitialBalance = token.balanceOf(user1);
         uint256 user2InitialBalance = token.balanceOf(user2);
 
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Transfer event from super._update
         emit IERC20.Transfer(user1, user2, FORCE_TRANSFER_AMOUNT);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -368,7 +368,7 @@ contract uRWA20Test is Test {
         uint256 user1InitialBalance = token.balanceOf(user1);
         uint256 user2InitialBalance = token.balanceOf(user2);
 
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC20.Transfer(user1, user2, FORCE_TRANSFER_AMOUNT);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -382,29 +382,207 @@ contract uRWA20Test is Test {
     function test_Revert_ForceTransfer_ToNonWhitelisted() public {
         // force transfer to non-whitelisted user
         assertFalse(token.isUserAllowed(nonWhitelistedUser));
-        vm.prank(forceTransferrer);
+        vm.prank(enforcer);
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.forceTransfer(user1, nonWhitelistedUser, 0, FORCE_TRANSFER_AMOUNT);
     }
 
 
-    function test_Revert_ForceTransfer_NotForceTransferrer() public {
-        vm.prank(user1); // Not force transferrer
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, FORCE_TRANSFER_ROLE));
+    function test_Revert_ForceTransfer_NotEnforcer() public {
+        vm.prank(user1); // Not enforcer
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
         token.forceTransfer(user1, user2, 0, FORCE_TRANSFER_AMOUNT);
     }
 
     function test_Revert_ForceTransfer_InsufficientBalance() public {
-        vm.prank(forceTransferrer);
         uint256 forceTransferAmount = INITIAL_MINT_AMOUNT + 1;
-        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, INITIAL_MINT_AMOUNT, forceTransferAmount));
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, available, forceTransferAmount));
+        vm.prank(enforcer);
         token.forceTransfer(user1, user2, 0, forceTransferAmount);
     }
 
     function test_Revert_ForceTransfer_ToZeroAddress() public {
-        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, address(0)));
+        vm.prank(enforcer);
         token.forceTransfer(user1, address(0), 0, FORCE_TRANSFER_AMOUNT);
+    }
+
+    // --- Freeze/Unfreeze/FrozenAmount Tests ---
+
+    function test_Freeze_Success() public {
+        vm.prank(enforcer);
+        vm.expectEmit(true, true, true, true);
+        int256 signedAmount = int256(FREEZE_AMOUNT);
+        emit IERC7943.FreezeStatusChange(user1, 0, signedAmount) ;
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT);
+    }
+
+    function test_Revert_Freeze_NotEnforcer() public {
+        int256 signedAmount = int256(FREEZE_AMOUNT);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user2, ENFORCER_ROLE));
+        vm.prank(user2); // Not an enforcer
+        token.changeFreezeStatus(user1, 0, signedAmount);
+    }
+
+    function test_Revert_Freeze_InsufficientBalance() public {
+        uint256 excessiveAmount = token.balanceOf(user1) + 1;
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        int256 signedAmount = int256(excessiveAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(uRWA20.InvalidFreezeAmount.selector, user1, available, excessiveAmount));
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+    }
+
+    function test_Unfreeze_Success() public {
+        int256 signedAmount = -int256(FREEZE_AMOUNT);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, -signedAmount); // Freeze first
+        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT, "Tokens not frozen correctly");
+
+        vm.expectEmit(true, true, true, true); 
+        emit IERC7943.FreezeStatusChange(user1, 0, signedAmount);
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        assertEq(token.freezeStatus(user1, 0), 0);
+    }
+
+    function test_Revert_Unfreeze_NotEnforcer() public {
+        int256 signedAmount = -int256(FREEZE_AMOUNT);
+
+        vm.prank(user2); // Not an enforcer
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user2, ENFORCER_ROLE));
+        token.changeFreezeStatus(user1, 0, signedAmount);
+    }
+
+    function test_Revert_Unfreeze_InsufficientFrozenAmount() public {
+        int256 signedAmount = int256(FREEZE_AMOUNT);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount); // Freeze a certain amount
+
+        uint256 excessiveUnfreezeAmount = FREEZE_AMOUNT + 1;
+        int256 signedAmountExcessive = -int256(excessiveUnfreezeAmount);
+        vm.expectRevert(abi.encodeWithSelector(uRWA20.InvalidFreezeAmount.selector, user1, token.freezeStatus(user1, 0), excessiveUnfreezeAmount));
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmountExcessive);
+    }
+
+    function test_FrozenAmount_ReturnsCorrectValue() public {
+        assertEq(token.freezeStatus(user1, 0), 0, "Initial frozen amount should be 0");
+        int256 signedAmount = int256(FREEZE_AMOUNT);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT, "Frozen amount mismatch after freeze");
+
+        uint256 partialUnfreezeAmount = FREEZE_AMOUNT / 2;
+        int256 signedPartialUnfreezeAmount = -int256(partialUnfreezeAmount);
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedPartialUnfreezeAmount);
+        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT - partialUnfreezeAmount, "Frozen amount mismatch after partial unfreeze");
+        int256 signedUnfreezeAmount = -int256(FREEZE_AMOUNT - partialUnfreezeAmount);
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedUnfreezeAmount); // Unfreeze the rest
+        assertEq(token.freezeStatus(user1, 0), 0, "Frozen amount should be 0 after full unfreeze");
+    }
+
+    // --- Tests for operations with frozen tokens ---
+
+    function test_Revert_Transfer_When_AllSenderBalanceFrozen() public {
+        int256 signedAmount = int256(INITIAL_MINT_AMOUNT);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount); // Freeze all of user1's tokens
+
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        vm.prank(user1);
+        token.transfer(user2, TRANSFER_AMOUNT);
+    }
+
+    function test_Revert_Transfer_When_TransferExceedsAvailableAfterFreeze() public {
+        uint256 amountToLeave = TRANSFER_AMOUNT / 2;
+        uint256 amountToFreeze = INITIAL_MINT_AMOUNT - amountToLeave;
+        int256 signedAmount = int256(amountToFreeze);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+
+        assertEq(available, amountToLeave, "Available balance calculation error");
+
+
+        vm.prank(user1);
+        // Attempt to transfer more than available
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        token.transfer(user2, TRANSFER_AMOUNT);
+    }
+
+    function test_Transfer_Success_When_TransferIsWithinAvailableAfterPartialFreeze() public {
+        uint256 amountToFreeze = FREEZE_AMOUNT;
+        uint256 availableAmountToTransfer = TRANSFER_AMOUNT / 2;
+        int256 signedAmount = int256(amountToFreeze);
+
+        // Ensure user1 has enough balance for freeze + transfer
+        assertTrue(INITIAL_MINT_AMOUNT >= amountToFreeze + availableAmountToTransfer, "Initial amount too low for test");
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+
+        uint256 user1InitialBalance = token.balanceOf(user1);
+        uint256 user2InitialBalance = token.balanceOf(user2);
+
+        vm.prank(user1);
+        vm.expectEmit(true, true, true, true);
+        emit IERC20.Transfer(user1, user2, availableAmountToTransfer);
+        assertTrue(token.transfer(user2, availableAmountToTransfer));
+
+        assertEq(token.balanceOf(user1), user1InitialBalance - availableAmountToTransfer);
+        assertEq(token.balanceOf(user2), user2InitialBalance + availableAmountToTransfer);
+        assertEq(token.freezeStatus(user1, 0), amountToFreeze, "Frozen amount changed unexpectedly");
+    }
+
+
+    function test_Revert_Burn_When_TokensAreFrozenAndBurnExceedsAvailable() public {
+        vm.prank(admin);
+        token.grantRole(BURNER_ROLE, user1); // Ensure user1 can burn
+
+        uint256 amountToFreeze = INITIAL_MINT_AMOUNT - (BURN_AMOUNT / 2); // Leave less than BURN_AMOUNT available
+        int256 signedAmount = int256(amountToFreeze);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        assertTrue(available < BURN_AMOUNT, "Available balance not less than burn amount");
+
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, 0, BURN_AMOUNT, available));
+        vm.prank(user1);
+        token.burn(BURN_AMOUNT);
+    }
+
+    function test_Revert_TransferFrom_When_FromBalanceFrozenAndTransferExceedsAvailable() public {
+        vm.prank(user1);
+        token.approve(user2, APPROVE_AMOUNT);
+
+        vm.prank(admin); // Whitelist otherUser if not already
+        token.changeWhitelist(otherUser, true);
+
+        uint256 amountToFreeze = INITIAL_MINT_AMOUNT - (APPROVE_AMOUNT / 2); // Leave less than APPROVE_AMOUNT available for user1
+        int256 signedAmount = int256(amountToFreeze);
+
+        vm.prank(enforcer);
+        token.changeFreezeStatus(user1, 0, signedAmount);
+        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+
+        assertTrue(available < APPROVE_AMOUNT, "Available balance for user1 not less than approve amount");
+
+        vm.prank(user2); // Spender
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, otherUser, 0, APPROVE_AMOUNT));
+        token.transferFrom(user1, otherUser, APPROVE_AMOUNT);
     }
 
     // --- Interface Support Tests ---
