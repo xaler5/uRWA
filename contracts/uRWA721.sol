@@ -26,8 +26,8 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     mapping(address user => bool whitelisted) public isWhitelisted;
 
     /// @notice Mapping storing the freezing status of assets for each user address.
-    /// @dev It gives True or False on whether the `tokenId` is frozen for `user`.
-    mapping(address user => mapping(uint256 tokenId => bool frozen)) internal _frozenTokens;
+    /// @dev It gives 1 (True) or 0 (False) on whether the `tokenId` is frozen for `user`.
+    mapping(address user => mapping(uint256 tokenId => uint8 frozen)) internal _frozenTokens;
 
     /// @notice Emitted when an account's whitelist status is changed.
     /// @param account The address whose status was changed.
@@ -37,8 +37,8 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a non-zero address but address(0) was provided.
     error NotZeroAddress(); 
 
-    /// @notice Error reverted when an operation requires a non-zero amount but 0 was provided.
-    error NotZeroAmount();
+    /// @notice Error reverted when an operation requires a 0/1 amount but something else was provided.
+    error InvalidAmount(uint256 amount);
 
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-721 token with name and symbol, and grants all roles
@@ -67,15 +67,14 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     function isTransferAllowed(address from, address to, uint256 tokenId, uint256) public view virtual override returns (bool allowed) {
         if (_ownerOf(tokenId) != from || _ownerOf(tokenId) == address(0)) return false; // Use internal function to avoid reverting for non existing tokenIds
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
-        if (_frozenTokens[from][tokenId]) return false; // The token is frozen for the user
-        // if (!_isAuthorized(from, _msgSender(), tokenId)) return false; // This check only makes sense whenever the transfer is being performed by a third party
+        if (_frozenTokens[from][tokenId] > 0) return false; // The token is frozen for the user
 
         return true;
     }
 
     /// @inheritdoc IERC7943
-    function freezeStatus(address user, uint256 tokenId) external view returns (uint256 result) {
-        result = _frozenTokens[user][tokenId] ? 1 : 0;
+    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount) {
+        amount = _frozenTokens[user][tokenId];
     }
 
     /// @notice Updates the whitelist status for a given account.
@@ -108,7 +107,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @param tokenId The specific token identifier to burn. 
     function burn(uint256 tokenId) external virtual onlyRole(BURNER_ROLE) {
         address previousOwner = _update(address(0), tokenId, _msgSender()); 
-        if (_frozenTokens[previousOwner][tokenId]) revert ERC7943NotAvailableAmount(previousOwner, tokenId, 1, 0);
+        if (_frozenTokens[previousOwner][tokenId] > 0) revert ERC7943NotAvailableAmount(previousOwner, tokenId, 1, 0);
         if (previousOwner == address(0)) {
             revert ERC721NonexistentToken(tokenId);
         }
@@ -116,17 +115,13 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function changeFreezeStatus(address user, uint256 tokenId, int256 amount) public onlyRole(ENFORCER_ROLE) {
-        if(amount == 0) revert NotZeroAmount();
-        uint256 unsignedAmount = amount > 0 ? uint256(amount) : uint256(-amount);
+    function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+        require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
+        require(amount == 0 || amount == 1, InvalidAmount(amount));
+        
+        _frozenTokens[user][tokenId] = uint8(amount);
 
-        if(amount > 0) {
-            _freeze(user, tokenId, unsignedAmount);
-        } else if (amount < 0) {
-            _unfreeze(user, tokenId, unsignedAmount);
-        }
-
-        emit FreezeStatusChange(user, tokenId, amount);
+        emit FrozenChange(user, tokenId, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -137,25 +132,13 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
         address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
         require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
         require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
-        if(_frozenTokens[previousOwner][tokenId])_frozenTokens[previousOwner][tokenId] = false; // Unfreeze the token if it was frozen
+        if(_frozenTokens[previousOwner][tokenId] > 0) {
+            _frozenTokens[previousOwner][tokenId] = 0; // Unfreeze the token if it was frozen
+            emit FrozenChange(previousOwner, tokenId, 0);
+        }
         ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, "");
         emit ForcedTransfer(from, to, tokenId, 1);
     }
-
-    /// @notice Freezes a specific `tokenId` for a `user`.
-    function _freeze(address user, uint256 tokenId, uint256) internal {
-        require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
-        
-        _frozenTokens[user][tokenId] = true;
-    }
-
-    /// @notice Unfreezes a specific `tokenId` for a `user`.
-    function _unfreeze(address user, uint256 tokenId, uint256) internal {
-        require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
-
-        _frozenTokens[user][tokenId] = false;
-    }
-
 
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-721 `_update` hook. Enforces transfer restrictions based on

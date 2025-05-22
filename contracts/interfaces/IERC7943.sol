@@ -16,11 +16,11 @@ interface IERC7943 is IERC165 {
     /// @param amount The amount seized.
     event ForcedTransfer(address indexed from, address indexed to, uint256 tokenId, uint256 amount);
 
-    /// @notice Emitted when a specific amount of a token ID is frozen/unfrozen for a user.
+    /// @notice Emitted when `setFrozen` is called, changing the frozen `amount` of `tokenId` tokens for `user`.
     /// @param user The address of the user whose tokens are being frozen.
     /// @param tokenId The ID of the token being frozen.
-    /// @param amount The amount of tokens frozen (amount > 0) or unfrozen (amount < 0).
-    event FreezeStatusChange(address indexed user, uint256 indexed tokenId, int256 amount);
+    /// @param amount The amount of tokens frozen.
+    event FrozenChange(address indexed user, uint256 indexed tokenId, uint256 indexed amount);
 
     /// @notice Error reverted when a user is not allowed to interact. 
     /// @param account The address of the user which is not allowed for interactions.
@@ -49,20 +49,20 @@ interface IERC7943 is IERC165 {
     /// @param amount The amount to force transfer.
     function forceTransfer(address from, address to, uint256 tokenId, uint256 amount) external;
 
-    /// @notice Changes the freezing status of an `user` asset corresponding to specified `tokenId`.
-    /// It can increase the amount of frozen assets (`amount` > 0) or decrease it (`amount` < 0).
+    /// @notice Changes the frozen status of `amount` of `tokenId` tokens belonging to an `user`.
+    /// This overwrites the current value, similar to an `approve` function.
     /// @dev Requires specific authorization. Frozen tokens cannot be transferred by the user.
     /// @param user The address of the user whose tokens are to be frozen/unfrozen.
     /// @param tokenId The ID of the token to freeze/unfreeze.
-    /// @param amount The amount of tokens to freeze/unfreeze.
-    function changeFreezeStatus(address user, uint256 tokenId, int256 amount) external;
+    /// @param amount The amount of tokens to freeze/unfreeze. 
+    function setFrozen(address user, uint256 tokenId, uint256 amount) external;
 
-    /// @notice Checks the frozen status of a specific token ID.
+    /// @notice Checks the frozen status/amount of a specific `tokenId`.
     /// @param user The address of the user.
     /// @param tokenId The ID of the token.
-    /// @return result The amount >= 0 of the token ID currently frozen for the user for ERC-20 and ERC-1155 tokens, 1 or 0 for ERC-721.
-    function freezeStatus(address user, uint256 tokenId) external view returns (uint256 result);
-
+    /// @return amount The amount of `tokenId` tokens currently frozen for `user`.
+    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount);
+ 
     /// @notice Checks if a transfer is currently possible according to token rules. It enforces validations on the frozen tokens.
     /// @dev This may involve checks like allowlists, blocklists, transfer limits etc.
     /// @param from The address sending tokens.

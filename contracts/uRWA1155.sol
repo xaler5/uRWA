@@ -40,14 +40,6 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a non-zero amount but 0 was provided.
     error NotZeroAmount();
 
-    /// @notice Error reverted when a freeze or unfreeze operation is attempted with an invalid amount.
-    /// @param user The address of the user whose tokens are being frozen or unfrozen.
-    /// @param tokenId The ID of the token being frozen or unfrozen.
-    /// @param relevantAmount For freezing, this is the user's available (unfrozen) balance.
-    ///                       For unfreezing, this is the user's currently frozen balance.
-    /// @param requestedAmount The amount requested to be frozen or unfrozen.
-    error InvalidFreezeAmount(address user, uint256 tokenId, uint256 relevantAmount, uint256 requestedAmount);
-
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-1155 token with a URI and grants all roles
     /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
@@ -78,8 +70,8 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function freezeStatus(address user, uint256 tokenId) external view returns (uint256 result) {
-        result = _frozenTokens[user][tokenId];
+    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount) {
+        amount = _frozenTokens[user][tokenId];
     }
 
     /// @notice Updates the whitelist status for a given account.
@@ -116,17 +108,10 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function changeFreezeStatus(address user, uint256 tokenId, int256 amount) public onlyRole(ENFORCER_ROLE) {
-        if(amount == 0) revert NotZeroAmount();
-        uint256 unsignedAmount = amount > 0 ? uint256(amount) : uint256(-amount);
-
-        if(amount > 0) {
-            _freeze(user, tokenId, unsignedAmount);
-        } else if (amount < 0) {
-            _unfreeze(user, tokenId, unsignedAmount);
-        }
-
-        emit FreezeStatusChange(user, tokenId, amount);
+    function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+        require(amount <= balanceOf(user, tokenId), IERC1155Errors.ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
+        _frozenTokens[user][tokenId] = amount;        
+        emit FrozenChange(user, tokenId, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -158,26 +143,15 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
             } else {
                 ERC1155Utils.checkOnERC1155BatchReceived(operator, from, to, ids, values, "");
             }
+        } 
+
+        // If more than unfrozen amount has been transferred, update frozen amount
+        if(_frozenTokens[from][tokenId] > balanceOf(from, tokenId)) {
+            _frozenTokens[from][tokenId] = balanceOf(from, tokenId);
+            emit FrozenChange(from, tokenId, _frozenTokens[from][tokenId]);
         }
 
-        if(_frozenTokens[from][tokenId] > balanceOf(from, tokenId)) _frozenTokens[from][tokenId] = balanceOf(from, tokenId);
-
         emit ForcedTransfer(from, to, tokenId, amount);
-    }
-
-    /// @notice Freezes an `amount` of specific `tokenId` for a `user`.
-    function _freeze(address user, uint256 tokenId, uint256 amount) internal {
-        uint256 available = balanceOf(user,tokenId) - _frozenTokens[user][tokenId];
-        require(amount <= available, InvalidFreezeAmount(user, tokenId, available, amount));
-        
-        _frozenTokens[user][tokenId] += amount;
-    }
-
-    /// @notice Unfreezes an `amount` of specific `tokenId` for a `user`.
-    function _unfreeze(address user, uint256 tokenId, uint256 amount) internal {
-        require(_frozenTokens[user][tokenId] >= amount, InvalidFreezeAmount(user, tokenId, _frozenTokens[user][tokenId], amount));
-
-        _frozenTokens[user][tokenId] -= amount;
     }
 
     /// @notice Hook that is called before any token transfer, including minting and burning.

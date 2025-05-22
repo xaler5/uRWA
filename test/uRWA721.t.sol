@@ -362,70 +362,70 @@ contract uRWA721Test is Test {
     function test_Freeze_Success() public {
         vm.prank(enforcer); // ENFORCER_ROLE
         vm.expectEmit(true, true, true, false);
-        emit IERC7943.FreezeStatusChange(user1, TOKEN_ID_1, 1);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen");
+        emit IERC7943.FrozenChange(user1, TOKEN_ID_1, 1);
+        token.setFrozen(user1, TOKEN_ID_1, 1);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 1, "Token should be frozen");
     }
 
     function test_Revert_Freeze_NotEnforcer() public {
         vm.prank(user1); // Not ENFORCER_ROLE
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        token.setFrozen(user1, TOKEN_ID_1, 1);
     }
 
     function test_Revert_Freeze_NotOwner() public {
         vm.prank(enforcer); // ENFORCER_ROLE
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidOwner.selector, user2));
-        token.changeFreezeStatus(user2, TOKEN_ID_1, 1); // user2 is not owner of TOKEN_ID_1
+        token.setFrozen(user2, TOKEN_ID_1, 1); // user2 is not owner of TOKEN_ID_1
     }
 
     function test_Unfreeze_Success() public {
         // First, freeze the token
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen initially");
+        token.setFrozen(user1, TOKEN_ID_1, 1);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 1, "Token should be frozen initially");
 
         // Then, unfreeze
         vm.prank(enforcer); // ENFORCER_ROLE
         vm.expectEmit(true, true, true, false);
-        emit IERC7943.FreezeStatusChange(user1, TOKEN_ID_1, -1);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
+        emit IERC7943.FrozenChange(user1, TOKEN_ID_1, 0);
+        token.setFrozen(user1, TOKEN_ID_1, 0);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
     }
 
     function test_Revert_Unfreeze_NotEnforcer() public {
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze first
+        token.setFrozen(user1, TOKEN_ID_1, 1); // Freeze first
 
         vm.prank(user1); // Not ENFORCER_ROLE
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
-        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
+        token.setFrozen(user1, TOKEN_ID_1, 0);
     }
 
     function test_Revert_Unfreeze_NotOwner() public {
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze first for user1
+        token.setFrozen(user1, TOKEN_ID_1, 1); // Freeze first for user1
 
         vm.prank(enforcer); // ENFORCER_ROLE
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidOwner.selector, user2));
-        token.changeFreezeStatus(user2, TOKEN_ID_1, -1); // user2 is not owner of TOKEN_ID_1
+        token.setFrozen(user2, TOKEN_ID_1, 0);
     }
 
     function test_FreezeStatus_Correctness() public {
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Initially token should not be frozen");
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 0, "Initially token should not be frozen");
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen");
+        token.setFrozen(user1, TOKEN_ID_1, 1);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 1, "Token should be frozen");
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, -1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
+        token.setFrozen(user1, TOKEN_ID_1, 0);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 0, "Token should be unfrozen");
     }
 
     function test_Revert_Transfer_WhenFrozen() public {
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1); // Freeze TOKEN_ID_1 for user1
+        token.setFrozen(user1, TOKEN_ID_1, 1); // Freeze TOKEN_ID_1 for user1
 
         vm.prank(user1); // Owner attempts transfer
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, TOKEN_ID_1, 1));
@@ -439,7 +439,7 @@ contract uRWA721Test is Test {
 
         // Freeze the token
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
+        token.setFrozen(user1, TOKEN_ID_1, 1);
 
         vm.prank(user1); // Owner (and burner) attempts to burn
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, TOKEN_ID_1, 1, 0));
@@ -448,15 +448,15 @@ contract uRWA721Test is Test {
 
     function test_ForceTransfer_UnfreezesToken() public {
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, TOKEN_ID_1, 1);
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 1, "Token should be frozen before force transfer");
+        token.setFrozen(user1, TOKEN_ID_1, 1);
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 1, "Token should be frozen before force transfer");
 
         vm.prank(enforcer);
         token.forceTransfer(user1, user2, TOKEN_ID_1, 1);
 
         assertEq(token.ownerOf(TOKEN_ID_1), user2, "Owner should be user2 after force transfer");
-        assertEq(token.freezeStatus(user1, TOKEN_ID_1), 0, "Token should be unfrozen for original owner after force transfer");
-        assertEq(token.freezeStatus(user2, TOKEN_ID_1), 0, "Token should not be frozen for new owner");
+        assertEq(token.getFrozen(user1, TOKEN_ID_1), 0, "Token should be unfrozen for original owner after force transfer");
+        assertEq(token.getFrozen(user2, TOKEN_ID_1), 0, "Token should not be frozen for new owner");
     }
 
     // --- Interface Support Tests ---

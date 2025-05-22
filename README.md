@@ -13,7 +13,7 @@ The uRWA standard, as defined by `IERC7943`, aims to provide essential functiona
 
 *   **Whitelisting:** Control which addresses are allowed to interact with the token (see `isUserAllowed` from `IERC7943` and `changeWhitelist` in reference implementations).
 *   **Transfer Control:** Define rules for when transfers are permitted (`isTransferAllowed`).
-*   **Asset Freezing:** Control the ability to freeze and unfreeze portions of a user's token balance or specific token IDs (`changeFreezeStatus`, `freezeStatus`).
+*   **Asset Freezing:** Control the ability to freeze and unfreeze portions of a user's token balance or specific token IDs (`setFrozen`, `getFrozen`).
 *   **ForceTransfer Functionality:** Allow authorized parties to forcibly transfer tokens, often necessary for regulatory compliance (`forceTransfer`).
 *   **Access Control:** The reference implementations utilize role-based access control (via OpenZeppelin's `AccessControlEnumerable`) to manage permissions for sensitive actions like minting, burning, forced transfers, managing the whitelist, and changing freeze status.
 
@@ -23,14 +23,14 @@ The `IERC7943` interface defines the following core components:
 
 **Functions:**
 *   `forceTransfer(address from, address to, uint256 tokenId, uint256 amount)`: Forcibly moves tokens.
-*   `changeFreezeStatus(address user, uint256 tokenId, int256 amount)`: Modifies the amount of frozen tokens for a user.
-*   `freezeStatus(address user, uint256 tokenId) returns (uint256 result)`: Queries the amount of frozen tokens.
+*   `setFrozen(address user, uint256 tokenId, uint256 amount)`: Modifies the amount of frozen tokens for a user.
+*   `getFrozen(address user, uint256 tokenId) returns (uint256 amount)`: Queries the amount of frozen tokens.
 *   `isTransferAllowed(address from, address to, uint256 tokenId, uint256 amount) returns (bool allowed)`: Checks if a standard transfer is permissible.
 *   `isUserAllowed(address user) returns (bool allowed)`: Checks if a user is permitted to interact with the token.
 
 **Events:**
 *   `ForcedTransfer(address indexed from, address indexed to, uint256 tokenId, uint256 amount)`: Emitted when tokens are forcibly transferred.
-*   `FreezeStatusChange(address indexed user, uint256 indexed tokenId, int256 amount)`: Emitted when the freeze status of a user's tokens changes.
+*   `FrozenChange(address indexed user, uint256 indexed tokenId, int256 amount)`: Emitted when the freeze status of a user's tokens changes.
 
 **Errors:**
 *   `ERC7943NotAllowedUser(address account)`: Reverted if a user is not allowed for an interaction.

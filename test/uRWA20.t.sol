@@ -188,7 +188,7 @@ contract uRWA20Test is Test {
 
     function test_Revert_Burn_InsufficientBalance() public {
         // Grant burner role to user1
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
         vm.prank(admin);
         token.grantRole(BURNER_ROLE, user1);
 
@@ -396,7 +396,7 @@ contract uRWA20Test is Test {
 
     function test_Revert_ForceTransfer_InsufficientBalance() public {
         uint256 forceTransferAmount = INITIAL_MINT_AMOUNT + 1;
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
 
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, available, forceTransferAmount));
         vm.prank(enforcer);
@@ -414,90 +414,66 @@ contract uRWA20Test is Test {
     function test_Freeze_Success() public {
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        int256 signedAmount = int256(FREEZE_AMOUNT);
-        emit IERC7943.FreezeStatusChange(user1, 0, signedAmount) ;
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT);
+        emit IERC7943.FrozenChange(user1, 0, FREEZE_AMOUNT) ;
+        token.setFrozen(user1, 0, FREEZE_AMOUNT);
+        assertEq(token.getFrozen(user1, 0), FREEZE_AMOUNT);
     }
 
     function test_Revert_Freeze_NotEnforcer() public {
-        int256 signedAmount = int256(FREEZE_AMOUNT);
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user2, ENFORCER_ROLE));
         vm.prank(user2); // Not an enforcer
-        token.changeFreezeStatus(user1, 0, signedAmount);
+        token.setFrozen(user1, 0, FREEZE_AMOUNT);
     }
 
     function test_Revert_Freeze_InsufficientBalance() public {
         uint256 excessiveAmount = token.balanceOf(user1) + 1;
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
-        int256 signedAmount = int256(excessiveAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(uRWA20.InvalidFreezeAmount.selector, user1, available, excessiveAmount));
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, token.balanceOf(user1), excessiveAmount));
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
+        token.setFrozen(user1, 0, excessiveAmount);
     }
 
     function test_Unfreeze_Success() public {
-        int256 signedAmount = -int256(FREEZE_AMOUNT);
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, -signedAmount); // Freeze first
-        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT, "Tokens not frozen correctly");
+        token.setFrozen(user1, 0, FREEZE_AMOUNT); // Freeze first
+        assertEq(token.getFrozen(user1, 0), FREEZE_AMOUNT, "Tokens not frozen correctly");
 
         vm.expectEmit(true, true, true, true); 
-        emit IERC7943.FreezeStatusChange(user1, 0, signedAmount);
+        emit IERC7943.FrozenChange(user1, 0, 0);
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        assertEq(token.freezeStatus(user1, 0), 0);
+        token.setFrozen(user1, 0, 0);
+        assertEq(token.getFrozen(user1, 0), 0);
     }
 
     function test_Revert_Unfreeze_NotEnforcer() public {
-        int256 signedAmount = -int256(FREEZE_AMOUNT);
-
         vm.prank(user2); // Not an enforcer
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user2, ENFORCER_ROLE));
-        token.changeFreezeStatus(user1, 0, signedAmount);
+        token.setFrozen(user1, 0, 0);
     }
-
-    function test_Revert_Unfreeze_InsufficientFrozenAmount() public {
-        int256 signedAmount = int256(FREEZE_AMOUNT);
-
-        vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount); // Freeze a certain amount
-
-        uint256 excessiveUnfreezeAmount = FREEZE_AMOUNT + 1;
-        int256 signedAmountExcessive = -int256(excessiveUnfreezeAmount);
-        vm.expectRevert(abi.encodeWithSelector(uRWA20.InvalidFreezeAmount.selector, user1, token.freezeStatus(user1, 0), excessiveUnfreezeAmount));
-        vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmountExcessive);
-    }
-
-    function test_FrozenAmount_ReturnsCorrectValue() public {
-        assertEq(token.freezeStatus(user1, 0), 0, "Initial frozen amount should be 0");
-        int256 signedAmount = int256(FREEZE_AMOUNT);
+ 
+    function test_GetFrozen_ReturnsCorrectValue() public {
+        assertEq(token.getFrozen(user1, 0), 0, "Initial frozen amount should be 0");
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT, "Frozen amount mismatch after freeze");
+        token.setFrozen(user1, 0, FREEZE_AMOUNT);
+        assertEq(token.getFrozen(user1, 0), FREEZE_AMOUNT, "Frozen amount mismatch after freeze");
 
         uint256 partialUnfreezeAmount = FREEZE_AMOUNT / 2;
-        int256 signedPartialUnfreezeAmount = -int256(partialUnfreezeAmount);
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedPartialUnfreezeAmount);
-        assertEq(token.freezeStatus(user1, 0), FREEZE_AMOUNT - partialUnfreezeAmount, "Frozen amount mismatch after partial unfreeze");
-        int256 signedUnfreezeAmount = -int256(FREEZE_AMOUNT - partialUnfreezeAmount);
+        token.setFrozen(user1, 0, partialUnfreezeAmount);
+        assertEq(token.getFrozen(user1, 0), partialUnfreezeAmount, "Frozen amount mismatch after partial unfreeze");
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedUnfreezeAmount); // Unfreeze the rest
-        assertEq(token.freezeStatus(user1, 0), 0, "Frozen amount should be 0 after full unfreeze");
+        token.setFrozen(user1, 0, 0); // Unfreeze the rest
+        assertEq(token.getFrozen(user1, 0), 0, "Frozen amount should be 0 after full unfreeze");
     }
 
     // --- Tests for operations with frozen tokens ---
 
     function test_Revert_Transfer_When_AllSenderBalanceFrozen() public {
-        int256 signedAmount = int256(INITIAL_MINT_AMOUNT);
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount); // Freeze all of user1's tokens
+        token.setFrozen(user1, 0, INITIAL_MINT_AMOUNT); // Freeze all of user1's tokens
 
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
         vm.prank(user1);
@@ -507,11 +483,10 @@ contract uRWA20Test is Test {
     function test_Revert_Transfer_When_TransferExceedsAvailableAfterFreeze() public {
         uint256 amountToLeave = TRANSFER_AMOUNT / 2;
         uint256 amountToFreeze = INITIAL_MINT_AMOUNT - amountToLeave;
-        int256 signedAmount = int256(amountToFreeze);
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        token.setFrozen(user1, 0, amountToFreeze);
+        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
 
         assertEq(available, amountToLeave, "Available balance calculation error");
 
@@ -525,13 +500,12 @@ contract uRWA20Test is Test {
     function test_Transfer_Success_When_TransferIsWithinAvailableAfterPartialFreeze() public {
         uint256 amountToFreeze = FREEZE_AMOUNT;
         uint256 availableAmountToTransfer = TRANSFER_AMOUNT / 2;
-        int256 signedAmount = int256(amountToFreeze);
 
         // Ensure user1 has enough balance for freeze + transfer
         assertTrue(INITIAL_MINT_AMOUNT >= amountToFreeze + availableAmountToTransfer, "Initial amount too low for test");
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
+        token.setFrozen(user1, 0, amountToFreeze);
 
         uint256 user1InitialBalance = token.balanceOf(user1);
         uint256 user2InitialBalance = token.balanceOf(user2);
@@ -543,7 +517,7 @@ contract uRWA20Test is Test {
 
         assertEq(token.balanceOf(user1), user1InitialBalance - availableAmountToTransfer);
         assertEq(token.balanceOf(user2), user2InitialBalance + availableAmountToTransfer);
-        assertEq(token.freezeStatus(user1, 0), amountToFreeze, "Frozen amount changed unexpectedly");
+        assertEq(token.getFrozen(user1, 0), amountToFreeze, "Frozen amount changed unexpectedly");
     }
 
 
@@ -552,11 +526,10 @@ contract uRWA20Test is Test {
         token.grantRole(BURNER_ROLE, user1); // Ensure user1 can burn
 
         uint256 amountToFreeze = INITIAL_MINT_AMOUNT - (BURN_AMOUNT / 2); // Leave less than BURN_AMOUNT available
-        int256 signedAmount = int256(amountToFreeze);
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        token.setFrozen(user1, 0, amountToFreeze);
+        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
         assertTrue(available < BURN_AMOUNT, "Available balance not less than burn amount");
 
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, 0, BURN_AMOUNT, available));
@@ -572,11 +545,10 @@ contract uRWA20Test is Test {
         token.changeWhitelist(otherUser, true);
 
         uint256 amountToFreeze = INITIAL_MINT_AMOUNT - (APPROVE_AMOUNT / 2); // Leave less than APPROVE_AMOUNT available for user1
-        int256 signedAmount = int256(amountToFreeze);
 
         vm.prank(enforcer);
-        token.changeFreezeStatus(user1, 0, signedAmount);
-        uint256 available = token.balanceOf(user1) - token.freezeStatus(user1, 0);
+        token.setFrozen(user1, 0, amountToFreeze);
+        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
 
         assertTrue(available < APPROVE_AMOUNT, "Available balance for user1 not less than approve amount");
 

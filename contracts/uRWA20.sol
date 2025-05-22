@@ -37,16 +37,6 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a non-zero address but address(0) was provided.
     error NotZeroAddress();
 
-    /// @notice Error reverted when an operation requires a non-zero amount but 0 was provided.
-    error NotZeroAmount();
-
-    /// @notice Error reverted when a freeze or unfreeze operation is attempted with an invalid amount.
-    /// @param user The address of the user whose tokens are being frozen or unfrozen.
-    /// @param relevantAmount For freezing, this is the user's available (unfrozen) balance.
-    ///                       For unfreezing, this is the user's currently frozen balance.
-    /// @param requestedAmount The amount requested to be frozen or unfrozen.
-    error InvalidFreezeAmount(address user, uint256 relevantAmount, uint256 requestedAmount);
-
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-20 token with name and symbol, and grants all roles
     /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
@@ -78,8 +68,8 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     } 
 
     /// @inheritdoc IERC7943
-    function freezeStatus(address user, uint256) external view returns (uint256 result) {
-        result = _frozenTokens[user];
+    function getFrozen(address user, uint256) external view returns (uint256 amount) {
+        amount = _frozenTokens[user];
     }
 
     /// @notice Updates the whitelist status for a given account.
@@ -113,17 +103,10 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function changeFreezeStatus(address user, uint256, int256 amount) public onlyRole(ENFORCER_ROLE) {
-        if(amount == 0) revert NotZeroAmount();
-        uint256 unsignedAmount = amount > 0 ? uint256(amount) : uint256(-amount);
-
-        if(amount > 0) {
-            _freeze(user, 0, unsignedAmount);
-        } else if (amount < 0) {
-            _unfreeze(user, 0, unsignedAmount);
-        }
-
-        emit FreezeStatusChange(user, 0, amount);
+    function setFrozen(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+        require(amount <= balanceOf(user), IERC20Errors.ERC20InsufficientBalance(user, balanceOf(user), amount));
+        _frozenTokens[user] = amount;
+        emit FrozenChange(user, 0, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -135,28 +118,18 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
         super._update(from, to, amount);
 
         // If more than unfrozen amount has been transferred, update frozen amount
-        if(_frozenTokens[from] > balanceOf(from)) _frozenTokens[from] = balanceOf(from);
+        if(_frozenTokens[from] > balanceOf(from)) {
+            _frozenTokens[from] = balanceOf(from);
+            emit FrozenChange(from, 0, _frozenTokens[from]);
+        }
+
         emit ForcedTransfer(from, to, 0, amount);
     }
 
-    /// @notice Freezes a specific `amount` of tokens for a `user`.
-    function _freeze(address user, uint256, uint256 amount) internal {
-        uint256 available = balanceOf(user) - _frozenTokens[user];
-        require(amount <= available, InvalidFreezeAmount(user, available, amount));
-        
-        _frozenTokens[user] += amount;
-    }
-
-    /// @notice Unfreezes a specific `amount` of tokens for a `user`.
-    function _unfreeze(address user, uint256, uint256 amount) internal {
-        require(_frozenTokens[user] >= amount, InvalidFreezeAmount(user, _frozenTokens[user], amount));
-        _frozenTokens[user] -= amount;
-    } 
-
     /// @notice Hook that is called during any token transfer, including minting and burning.
-    /// @dev Overrides the ERC20 `_update` hook. Enforces transfer restrictions based on
+    /// @dev Overrides the ERC-20 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943Frozen} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943NotAvailableAmount} if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param amount The amount being transferred.
