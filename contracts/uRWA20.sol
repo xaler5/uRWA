@@ -90,60 +90,80 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @param to The address that will receive the minted tokens.
     /// @param amount The amount of tokens to mint.
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+        require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         _mint(to, amount);
     }
 
-    /// @notice Destroys `amount` tokens from the caller's account.
+    /// @notice Destroys `amount` tokens for a given `from` address.
     /// @dev Can only be called by accounts holding the `BURNER_ROLE`.
     /// Emits a {Transfer} event with `to` set to the zero address.
+    /// It unfreezes tokens if required to satisfy `amount` burn.
+    /// @param from The address from which tokens are burned.
     /// @param amount The amount of tokens to burn.
-    function burn(uint256 amount) external onlyRole(BURNER_ROLE) {
-        _burn(_msgSender(), amount);
+    function burn(address from, uint256 amount) external onlyRole(BURNER_ROLE) {
+        // Unfreeze tokens if possible and required.
+        uint256 unfrozenBalance = balanceOf(from) - _frozenTokens[from];
+        if (amount > unfrozenBalance && balanceOf(from) >= amount) {
+            _setFrozen(from, amount - unfrozenBalance);
+        }
+        _burn(from, amount);
     }
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
     function setFrozen(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user), IERC20Errors.ERC20InsufficientBalance(user, balanceOf(user), amount));
-        _frozenTokens[user] = amount;
-        emit Frozen(user, 0, amount);
+        _setFrozen(user, amount);
     }
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`.
+    /// It unfreezes tokens if required to satisfy `amount` transfer.
     function forceTransfer(address from, address to, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-
-        // Directly update balances, bypassing overridden _update
-        super._update(from, to, amount);
-
-        // If more than unfrozen amount has been transferred, update frozen amount
-        if(_frozenTokens[from] > balanceOf(from)) {
-            _frozenTokens[from] = balanceOf(from);
-            emit Frozen(from, 0, _frozenTokens[from]);
+        // Unfreeze tokens if possible and required.
+        uint256 unfrozenBalance = balanceOf(from) - _frozenTokens[from];
+        if (amount > unfrozenBalance && balanceOf(from) >= amount) {
+            _setFrozen(from, amount - unfrozenBalance);
         }
-
+        super._transfer(from, to, amount);
         emit ForcedTransfer(from, to, 0, amount);
     }
 
-    /// @notice Hook that is called during any token transfer, including minting and burning.
-    /// @dev Overrides the ERC-20 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943InsufficientUnfrozenBalance} if checks fail.
-    /// @param from The address sending tokens (zero address for minting).
-    /// @param to The address receiving tokens (zero address for burning).
-    /// @param amount The amount being transferred.
-    function _update(address from, address to, uint256 amount) internal virtual override {
-        if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount)); // isTransferAllowed checks for frozen assets
-        } else if (from == address(0)) { // Mint
-            require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else { // Burn - Can't burn more than unfrozen balance
-            uint256 available = balanceOf(from) - _frozenTokens[from];
-            require(amount <= available || amount < balanceOf(from), ERC7943InsufficientUnfrozenBalance(from, 0, amount, available));
-        } 
+    /// @inheritdoc IERC20
+    /// @dev Enforces ERC-7943 transfer restrictions.
+    function transfer(address to, uint256 amount) public virtual override returns (bool) {
+        _validatePublicTransfer(_msgSender(), to, amount);
+        return super.transfer(to, amount);
+    }
 
-        super._update(from, to, amount);
+    /// @inheritdoc IERC20
+    /// @dev Enforces ERC-7943 transfer restrictions.
+    function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool) {
+        _validatePublicTransfer(from, to, amount);
+        return super.transferFrom(from, to, amount);
+    }
+
+    /// @notice Validates a public transfer according to the rules defined in ERC-7943.
+    /// @dev Checks if both `from` and `to` are whitelisted, if the transfer is allowed,
+    /// and if the `amount` does not exceed the available balance after accounting for frozen tokens.
+    /// @param from The sender address.
+    /// @param to The recipienta address.
+    /// @param amount The amount of tokens to transfer.
+    function _validatePublicTransfer(address from, address to, uint256 amount) internal view virtual {
+        require(isUserAllowed(from), ERC7943NotAllowedUser(from));
+        require(isUserAllowed(to), ERC7943NotAllowedUser(to));
+        require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
+        uint256 balance  = balanceOf(from);
+        uint256 unfrozen = balance - _frozenTokens[from];
+        // `ERC20._update` will throw `ERC20InsufficientBalance` if `balance < amount`.
+        require(unfrozen >= amount || balance < amount, ERC7943InsufficientUnfrozenBalance(from, 0, amount, unfrozen));
+        // Zero address check is handled by `ERC20._transfer`.
+    }
+
+    function _setFrozen(address user, uint256 amount) internal virtual {
+        _frozenTokens[user] = amount;
+        emit Frozen(user, 0, amount);
     }
 
     /// @notice See {IERC165-supportsInterface}.
