@@ -33,12 +33,12 @@ interface IERC7943 is IERC165 {
     /// @param amount The amount being transferred.
     error ERC7943NotAllowedTransfer(address from, address to, uint256 tokenId, uint256 amount);
 
-    /// @notice Error reverted when a transfer is attempted from `user` but the `amount` is bigger than available (unfrozen) tokens.
+    /// @notice Error reverted when a transfer is attempted from `user` with an `amount` less or equal than its balance, but greater than its unfrozen balance.
     /// @param user The address holding the tokens.
     /// @param tokenId The ID of the token being transferred. 
     /// @param amount The amount being transferred.
     /// @param available The amount of tokens that are available to transfer.
-    error ERC7943NotAvailableAmount(address user, uint256 tokenId, uint256 amount, uint256 available);
+    error ERC7943InsufficientUnfrozenBalance(address user, uint256 tokenId, uint256 amount, uint256 available);
 
     /// @notice Takes tokens from one address and transfers them to another.
     /// @dev Requires specific authorization. Used for regulatory compliance or recovery scenarios.

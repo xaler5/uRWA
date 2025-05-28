@@ -129,7 +129,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-20 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943NotAvailableAmount} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943InsufficientUnfrozenBalance} if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param amount The amount being transferred.
@@ -138,9 +138,9 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
             require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount)); // isTransferAllowed checks for frozen assets
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else { // Burn - Can't burn more than available balance minus frozen tokens
+        } else { // Burn - Can't burn more than unfrozen balance
             uint256 available = balanceOf(from) - _frozenTokens[from];
-            require(amount <= available, ERC7943NotAvailableAmount(from, 0, amount, available));
+            require(amount <= available || amount < balanceOf(from), ERC7943InsufficientUnfrozenBalance(from, 0, amount, available));
         } 
 
         super._update(from, to, amount);

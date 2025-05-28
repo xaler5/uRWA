@@ -158,7 +158,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     /// @dev Overrides the ERC-1155 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting. It also checks
     /// if the transfer amount is available (unfrozen) for burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943NotAvailableAmount} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943InsufficientUnfrozenBalance} if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param ids The array of ids.
@@ -179,7 +179,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
         } else if (to == address(0)) { // Burn
             for (uint256 i = 0; i < ids.length; ++i) {
                 uint256 available = balanceOf(from, ids[i]) - _frozenTokens[from][ids[i]];
-                require(values[i] <= available, ERC7943NotAvailableAmount(from, ids[i], values[i], available));
+                require(values[i] <= available || values[i] < balanceOf(from, ids[i]), ERC7943InsufficientUnfrozenBalance(from, ids[i], values[i], available));
             }
         }
 

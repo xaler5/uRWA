@@ -35,7 +35,7 @@ The `IERC7943` interface defines the following core components:
 **Errors:**
 *   `ERC7943NotAllowedUser(address account)`: Reverted if a user is not allowed for an interaction.
 *   `ERC7943NotAllowedTransfer(address from, address to, uint256 tokenId, uint256 amount)`: Reverted if a transfer is not permitted by current rules.
-*   `ERC7943NotAvailableAmount(address user, uint256 tokenId, uint256 amount, uint256 available)`: Reverted if a transfer attempts to move more tokens than are available (unfrozen).
+*   `ERC7943InsufficientUnfrozenBalance(address user, uint256 tokenId, uint256 amount, uint256 available)`: Reverted if a transfer attempts to move more tokens than are available unfrozen, given that enough baseline balance is available.
 
 ## Implementations
 

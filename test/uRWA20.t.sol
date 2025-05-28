@@ -194,7 +194,7 @@ contract uRWA20Test is Test {
 
         vm.prank(user1);
         uint256 burnAmount = available + 1; // More than available balance
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, 0, burnAmount, available));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, burnAmount, available));
         token.burn(burnAmount);
     }
 
@@ -532,7 +532,7 @@ contract uRWA20Test is Test {
         uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
         assertTrue(available < BURN_AMOUNT, "Available balance not less than burn amount");
 
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, 0, BURN_AMOUNT, available));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, BURN_AMOUNT, available));
         vm.prank(user1);
         token.burn(BURN_AMOUNT);
     }

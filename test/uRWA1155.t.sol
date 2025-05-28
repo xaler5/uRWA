@@ -193,7 +193,7 @@ contract uRWA1155Test is Test {
         token.grantRole(BURNER_ROLE, user1);
         vm.prank(user1);
         uint256 burnAmount = available + 1; // More than available
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, TOKEN_ID_1, burnAmount, available));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, TOKEN_ID_1, burnAmount, available));
         token.burn(TOKEN_ID_1, burnAmount);
     }
 
@@ -207,7 +207,7 @@ contract uRWA1155Test is Test {
         vm.prank(user1);
         // Attempt to burn more than available (balance - frozen)
         uint256 availableToBurn = MINT_AMOUNT - FREEZE_AMOUNT;
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, TOKEN_ID_1, availableToBurn + 1, available));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, TOKEN_ID_1, availableToBurn + 1, available));
         token.burn(TOKEN_ID_1, availableToBurn + 1);
     }
 

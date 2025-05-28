@@ -442,7 +442,7 @@ contract uRWA721Test is Test {
         token.setFrozen(user1, TOKEN_ID_1, 1);
 
         vm.prank(user1); // Owner (and burner) attempts to burn
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAvailableAmount.selector, user1, TOKEN_ID_1, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, TOKEN_ID_1, 1, 0));
         token.burn(TOKEN_ID_1);
     }
 

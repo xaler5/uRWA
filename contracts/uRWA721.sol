@@ -107,7 +107,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @param tokenId The specific token identifier to burn. 
     function burn(uint256 tokenId) external virtual onlyRole(BURNER_ROLE) {
         address previousOwner = _update(address(0), tokenId, _msgSender()); 
-        if (_frozenTokens[previousOwner][tokenId] > 0) revert ERC7943NotAvailableAmount(previousOwner, tokenId, 1, 0);
+        if (_frozenTokens[previousOwner][tokenId] > 0) revert ERC7943InsufficientUnfrozenBalance(previousOwner, tokenId, 1, 0);
         if (previousOwner == address(0)) {
             revert ERC721NonexistentToken(tokenId);
         }
