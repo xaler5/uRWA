@@ -106,7 +106,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     function setFrozen(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user), IERC20Errors.ERC20InsufficientBalance(user, balanceOf(user), amount));
         _frozenTokens[user] = amount;
-        emit FrozenChange(user, 0, amount);
+        emit Frozen(user, 0, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -120,7 +120,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
         // If more than unfrozen amount has been transferred, update frozen amount
         if(_frozenTokens[from] > balanceOf(from)) {
             _frozenTokens[from] = balanceOf(from);
-            emit FrozenChange(from, 0, _frozenTokens[from]);
+            emit Frozen(from, 0, _frozenTokens[from]);
         }
 
         emit ForcedTransfer(from, to, 0, amount);

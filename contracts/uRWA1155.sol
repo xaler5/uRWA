@@ -111,7 +111,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user, tokenId), IERC1155Errors.ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
         _frozenTokens[user][tokenId] = amount;        
-        emit FrozenChange(user, tokenId, amount);
+        emit Frozen(user, tokenId, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -148,7 +148,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
         // If more than unfrozen amount has been transferred, update frozen amount
         if(_frozenTokens[from][tokenId] > balanceOf(from, tokenId)) {
             _frozenTokens[from][tokenId] = balanceOf(from, tokenId);
-            emit FrozenChange(from, tokenId, _frozenTokens[from][tokenId]);
+            emit Frozen(from, tokenId, _frozenTokens[from][tokenId]);
         }
 
         emit ForcedTransfer(from, to, tokenId, amount);

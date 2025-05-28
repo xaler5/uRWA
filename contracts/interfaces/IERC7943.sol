@@ -20,7 +20,7 @@ interface IERC7943 is IERC165 {
     /// @param user The address of the user whose tokens are being frozen.
     /// @param tokenId The ID of the token being frozen.
     /// @param amount The amount of tokens frozen.
-    event FrozenChange(address indexed user, uint256 indexed tokenId, uint256 indexed amount);
+    event Frozen(address indexed user, uint256 indexed tokenId, uint256 indexed amount);
 
     /// @notice Error reverted when a user is not allowed to interact. 
     /// @param account The address of the user which is not allowed for interactions.

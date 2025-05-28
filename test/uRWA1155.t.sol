@@ -506,7 +506,7 @@ contract uRWA1155Test is Test {
     function test_Freeze_Success() public {
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.FrozenChange(user1, TOKEN_ID_1, FREEZE_AMOUNT);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, FREEZE_AMOUNT);
         token.setFrozen(user1, TOKEN_ID_1, FREEZE_AMOUNT);
         assertEq(token.getFrozen(user1, TOKEN_ID_1), FREEZE_AMOUNT);
     }
@@ -529,7 +529,7 @@ contract uRWA1155Test is Test {
         token.setFrozen(user1, TOKEN_ID_1, FREEZE_AMOUNT); // Freeze first
 
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.FrozenChange(user1, TOKEN_ID_1, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         vm.prank(enforcer);
         token.setFrozen(user1, TOKEN_ID_1, 0);
         assertEq(token.getFrozen(user1, TOKEN_ID_1), 0);
