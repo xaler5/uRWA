@@ -151,13 +151,13 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @param to The recipienta address.
     /// @param amount The amount of tokens to transfer.
     function _validatePublicTransfer(address from, address to, uint256 amount) internal view virtual {
-        require(isUserAllowed(from), ERC7943NotAllowedUser(from));
-        require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
         uint256 balance  = balanceOf(from);
         uint256 unfrozen = balance - _frozenTokens[from];
         // `ERC20._update` will throw `ERC20InsufficientBalance` if `balance < amount`.
         require(unfrozen >= amount || balance < amount, ERC7943InsufficientUnfrozenBalance(from, 0, amount, unfrozen));
+        require(isUserAllowed(from), ERC7943NotAllowedUser(from));
+        require(isUserAllowed(to), ERC7943NotAllowedUser(to));
+        require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
         // Zero address check is handled by `ERC20._transfer`.
     }
 

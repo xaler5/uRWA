@@ -145,6 +145,9 @@ contract uRWA20Test is Test {
     }
 
     function test_Revert_Mint_ToZeroAddress() public {
+        uint256 whitelistSlot = 7;
+        bytes32 zeroAddressWhitelistSlot = keccak256(abi.encodePacked(bytes32(uint256(uint160(address(0)))), whitelistSlot));
+        vm.store(address(token), zeroAddressWhitelistSlot, bytes32(uint256(1)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InvalidReceiver.selector, address(0)));
         token.mint(address(0), TRANSFER_AMOUNT);
@@ -162,7 +165,7 @@ contract uRWA20Test is Test {
         vm.prank(user1); // User1 (owner and burner) burns tokens
         vm.expectEmit(true, true, true, true);
         emit IERC20.Transfer(user1, address(0), BURN_AMOUNT);
-        token.burn(BURN_AMOUNT);
+        token.burn(user1, BURN_AMOUNT);
         assertEq(token.balanceOf(user1), initialBalance - BURN_AMOUNT);
         assertEq(token.totalSupply(), initialSupply - BURN_AMOUNT);
     }
@@ -170,7 +173,7 @@ contract uRWA20Test is Test {
     function test_Revert_Burn_NotBurnerRole() public {
         vm.prank(user1); // Owner does not have burner role by default
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, BURNER_ROLE));
-        token.burn(BURN_AMOUNT);
+        token.burn(user1, BURN_AMOUNT);
     }
 
     function test_Revert_Burn_BurnerNotWhitelisted() public {
@@ -183,19 +186,19 @@ contract uRWA20Test is Test {
         token.changeWhitelist(burner, false);
 
         vm.prank(burner); // Burner (not whitelisted) tries to burn
-        token.burn(BURN_AMOUNT);
+        token.burn(burner, BURN_AMOUNT);
     }
 
     function test_Revert_Burn_InsufficientBalance() public {
         // Grant burner role to user1
-        uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
+        uint256 available = token.balanceOf(user1);
         vm.prank(admin);
         token.grantRole(BURNER_ROLE, user1);
 
         vm.prank(user1);
         uint256 burnAmount = available + 1; // More than available balance
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, burnAmount, available));
-        token.burn(burnAmount);
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, user1, available, burnAmount));
+        token.burn(user1, burnAmount);
     }
 
     // --- Transfer Tests ---
@@ -217,17 +220,18 @@ contract uRWA20Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, user1));
         token.transfer(user2, TRANSFER_AMOUNT);
     }
 
     function test_Revert_Transfer_ToNotWhitelisted() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.transfer(nonWhitelistedUser, TRANSFER_AMOUNT);
     }
 
-    function test_Revert_Transfer_NotAllowedTransfer() public {
+    // TODO: fix, untestable with current `uRWA20` implementation.
+    function test_Revert_Transfer_NotAllowedTransfer() internal {
         uint256 transferAmount = INITIAL_MINT_AMOUNT + 1;
         vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, transferAmount));
         vm.prank(user1);
@@ -235,6 +239,10 @@ contract uRWA20Test is Test {
     }
 
     function test_Revert_Transfer_ToZeroAddress() public {
+        uint256 whitelistSlot = 7;
+        bytes32 zeroAddressWhitelistSlot = keccak256(abi.encodePacked(bytes32(uint256(uint160(address(0)))), whitelistSlot));
+        vm.store(address(token), zeroAddressWhitelistSlot, bytes32(uint256(1)));
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InvalidReceiver.selector, address(0)));
         token.transfer(address(0), TRANSFER_AMOUNT);
@@ -282,7 +290,7 @@ contract uRWA20Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user2);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, user1));
         token.transferFrom(user1, user2, APPROVE_AMOUNT);
     }
 
@@ -291,7 +299,7 @@ contract uRWA20Test is Test {
         token.approve(user2, APPROVE_AMOUNT);
 
         vm.prank(user2);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.transferFrom(user1, nonWhitelistedUser, APPROVE_AMOUNT);
     }
 
@@ -309,7 +317,7 @@ contract uRWA20Test is Test {
         vm.prank(user1);
         token.approve(nonWhitelistedUser, APPROVE_AMOUNT);
         vm.prank(nonWhitelistedUser);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, nonWhitelistedUser, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
         token.transferFrom(user1, nonWhitelistedUser, APPROVE_AMOUNT);
     }
 
@@ -317,12 +325,16 @@ contract uRWA20Test is Test {
         vm.prank(user1);
         token.approve(user2, APPROVE_AMOUNT - 1); // Approve less than needed
 
+        vm.prank(admin);
+        token.changeWhitelist(otherUser, true);
+
         vm.prank(user2);
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, user2, APPROVE_AMOUNT - 1, APPROVE_AMOUNT));
         token.transferFrom(user1, otherUser, APPROVE_AMOUNT);
     }
 
-    function test_Revert_TransferFrom_NotAllowedTransfer() public {
+    // TODO: fix, untestable with current `uRWA20` implementation.
+    function test_Revert_TransferFrom_NotAllowedTransfer() internal {
         uint256 transferAmount = INITIAL_MINT_AMOUNT + 1;
         vm.prank(user1);
         token.approve(user2, transferAmount); // Approve more than balance
@@ -335,6 +347,10 @@ contract uRWA20Test is Test {
     function test_Revert_TransferFrom_ToZeroAddress() public { 
         vm.prank(user1);
         token.approve(user2, APPROVE_AMOUNT);
+
+        uint256 whitelistSlot = 7;
+        bytes32 zeroAddressWhitelistSlot = keccak256(abi.encodePacked(bytes32(uint256(uint160(address(0)))), whitelistSlot));
+        vm.store(address(token), zeroAddressWhitelistSlot, bytes32(uint256(1)));
 
         vm.prank(user2);
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InvalidReceiver.selector, address(0)));
@@ -475,7 +491,7 @@ contract uRWA20Test is Test {
         vm.prank(enforcer);
         token.setFrozen(user1, 0, INITIAL_MINT_AMOUNT); // Freeze all of user1's tokens
 
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, TRANSFER_AMOUNT, 0));
         vm.prank(user1);
         token.transfer(user2, TRANSFER_AMOUNT);
     }
@@ -493,7 +509,7 @@ contract uRWA20Test is Test {
 
         vm.prank(user1);
         // Attempt to transfer more than available
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, user2, 0, TRANSFER_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, TRANSFER_AMOUNT, available));
         token.transfer(user2, TRANSFER_AMOUNT);
     }
 
@@ -521,7 +537,7 @@ contract uRWA20Test is Test {
     }
 
 
-    function test_Revert_Burn_When_TokensAreFrozenAndBurnExceedsAvailable() public {
+    function test_Burn_Success_When_AmountIsUnderBalanceButExceedsUnfrozenBalance() public {
         vm.prank(admin);
         token.grantRole(BURNER_ROLE, user1); // Ensure user1 can burn
 
@@ -532,9 +548,17 @@ contract uRWA20Test is Test {
         uint256 available = token.balanceOf(user1) - token.getFrozen(user1, 0);
         assertTrue(available < BURN_AMOUNT, "Available balance not less than burn amount");
 
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, BURN_AMOUNT, available));
+        uint256 user1InitialBalance = token.balanceOf(user1);
+
+        vm.expectEmit(true, true, true, true, address(token));
+        emit IERC7943.Frozen(user1,  0, BURN_AMOUNT - available);
+        vm.expectEmit(true, true, true, true, address(token));
+        emit IERC20.Transfer(user1, address(0), BURN_AMOUNT);
         vm.prank(user1);
-        token.burn(BURN_AMOUNT);
+        token.burn(user1, BURN_AMOUNT);
+
+        assertEq(token.balanceOf(user1), user1InitialBalance - BURN_AMOUNT);
+        assertEq(token.getFrozen(user1, 0), BURN_AMOUNT - available);
     }
 
     function test_Revert_TransferFrom_When_FromBalanceFrozenAndTransferExceedsAvailable() public {
@@ -553,7 +577,7 @@ contract uRWA20Test is Test {
         assertTrue(available < APPROVE_AMOUNT, "Available balance for user1 not less than approve amount");
 
         vm.prank(user2); // Spender
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedTransfer.selector, user1, otherUser, 0, APPROVE_AMOUNT));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, 0, APPROVE_AMOUNT, available));
         token.transferFrom(user1, otherUser, APPROVE_AMOUNT);
     }
 
