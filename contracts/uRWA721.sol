@@ -65,7 +65,8 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     function isTransferAllowed(address from, address to, uint256 tokenId, uint256) public view virtual override returns (bool allowed) {
-        if (_ownerOf(tokenId) != from || _ownerOf(tokenId) == address(0)) return false; // Use internal function to avoid reverting for non existing tokenIds
+        address owner = _ownerOf(tokenId);
+        if (owner != from || owner == address(0)) return false; // Use internal function to avoid reverting for non existing tokenIds
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
         if (_frozenTokens[from][tokenId] > 0) return false; // The token is frozen for the user
 
@@ -107,10 +108,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @param tokenId The specific token identifier to burn. 
     function burn(uint256 tokenId) external virtual onlyRole(BURNER_ROLE) {
         address previousOwner = _update(address(0), tokenId, _msgSender()); 
-        if (_frozenTokens[previousOwner][tokenId] > 0) revert ERC7943NotAvailableAmount(previousOwner, tokenId, 1, 0);
-        if (previousOwner == address(0)) {
-            revert ERC721NonexistentToken(tokenId);
-        }
+        if (previousOwner == address(0)) revert ERC721NonexistentToken(tokenId);
     }
 
     /// @inheritdoc IERC7943
@@ -119,9 +117,10 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
         require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
         require(amount == 0 || amount == 1, InvalidAmount(amount));
         
+        uint8 previousAmount = _frozenTokens[user][tokenId];
         _frozenTokens[user][tokenId] = uint8(amount);
 
-        emit FrozenChange(user, tokenId, amount);
+        emit Frozen(user, tokenId, previousAmount, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -129,39 +128,55 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     function forceTransfer(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(ENFORCER_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        address previousOwner = super._update(to, tokenId, address(0)); // Skip _update override
-        require(previousOwner != address(0), ERC721NonexistentToken(tokenId));
-        require(previousOwner == from, ERC721IncorrectOwner(from, tokenId, previousOwner));
-        if(_frozenTokens[previousOwner][tokenId] > 0) {
-            _frozenTokens[previousOwner][tokenId] = 0; // Unfreeze the token if it was frozen
-            emit FrozenChange(previousOwner, tokenId, 0);
-        }
+
+        _excessFrozenUpdate(from , tokenId);
+
+        super._update(to, tokenId, address(0)); // Skip _update override
         ERC721Utils.checkOnERC721Received(_msgSender(), from, to, tokenId, "");
+        
         emit ForcedTransfer(from, to, tokenId, 1);
+    }
+
+    function _excessFrozenUpdate(address from, uint256 tokenId) internal {
+        _validateCorrectOwner(from, tokenId);
+        if(_frozenTokens[from][tokenId] > 0) {
+            _frozenTokens[from][tokenId] = 0; // Unfreeze the token if it was frozen
+            emit Frozen(from, tokenId, 1, 0);
+        }
+    }
+
+    function _validateCorrectOwner(address claimant, uint256 tokenId) internal view {
+        address currentOwner = ownerOf(tokenId);
+
+        require(currentOwner == claimant, ERC721IncorrectOwner(claimant, tokenId, currentOwner));
     }
 
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-721 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer} or {ERC7943NotAllowedUser} if checks fail.
-    /// @param auth The address sending tokens (zero address for minting).
+    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}. {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// token errors if checks fail.
     /// @param to The address receiving tokens (zero address for burning).
-    /// @param value The amount being transferred.
-    function _update(address to, uint256 value, address auth) internal virtual override returns(address) {
-        address from = _ownerOf(value);
+    /// @param tokenId The if of the token being transferred.
+    /// @param auth The address sending tokens (zero address for minting).
+    function _update(address to, uint256 tokenId, address auth) internal virtual override returns(address) {
+        address from = _ownerOf(tokenId);
 
         if (auth != address(0)) {
-            _checkAuthorized(from, auth, value);
+            _checkAuthorized(from, auth, tokenId);
         }
 
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, value, 1), ERC7943NotAllowedTransfer(from, to, value, 1));
+            _validateCorrectOwner(from, tokenId);
+            require(_frozenTokens[from][tokenId] == 0, ERC7943InsufficientUnfrozenBalance(from, tokenId, 1, 0));
+            require(isTransferAllowed(from, to, tokenId, 1), ERC7943NotAllowedTransfer(from, to, tokenId, 1));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else { // Burn - Frozen status is checked in the burn function
+        } else {
+            _excessFrozenUpdate(from, tokenId);
         } 
 
-        return super._update(to, value, auth);
+        return super._update(to, tokenId, auth);
     }
 
     /// @notice See {IERC165-supportsInterface}.

@@ -65,10 +65,10 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
         if (!isWhitelisted[user]) return false;
         
         return true;
-    } 
+    }
 
     /// @inheritdoc IERC7943
-    function getFrozen(address user, uint256) external view returns (uint256 amount) {
+    function getFrozen(address user, uint256) public virtual view returns (uint256 amount) {
         amount = _frozenTokens[user];
     }
 
@@ -105,8 +105,9 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
     function setFrozen(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user), IERC20Errors.ERC20InsufficientBalance(user, balanceOf(user), amount));
+        uint256 frozenTokensBefore = _frozenTokens[user];
         _frozenTokens[user] = amount;
-        emit FrozenChange(user, 0, amount);
+        emit Frozen(user, 0, frozenTokensBefore,amount);
     }
 
     /// @inheritdoc IERC7943
@@ -114,34 +115,42 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     function forceTransfer(address from, address to, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
 
+        _excessFrozenUpdate(from, amount);
+        
         // Directly update balances, bypassing overridden _update
         super._update(from, to, amount);
 
-        // If more than unfrozen amount has been transferred, update frozen amount
-        if(_frozenTokens[from] > balanceOf(from)) {
-            _frozenTokens[from] = balanceOf(from);
-            emit FrozenChange(from, 0, _frozenTokens[from]);
-        }
-
         emit ForcedTransfer(from, to, 0, amount);
+    }
+
+    function _excessFrozenUpdate(address user, uint256 amount) internal {
+        uint256 frozenTokensBefore = _frozenTokens[user];
+        uint256 unfrozenBalance = balanceOf(user) - frozenTokensBefore;
+        if(amount > unfrozenBalance && amount <= balanceOf(user)) { 
+            // Protect from underflow: if amount > balanceOf(user) the call will revert in super._update with insufficient balance error
+            _frozenTokens[user] -= amount - unfrozenBalance; // Reduce by excess amount
+            emit Frozen(user, 0, frozenTokensBefore, _frozenTokens[user]);
+        }
     }
 
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-20 `_update` hook. Enforces transfer restrictions based on
     /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943NotAvailableAmount} if checks fail.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// token errors if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param amount The amount being transferred.
     function _update(address from, address to, uint256 amount) internal virtual override {
         if (from != address(0) && to != address(0)) { // Transfer
-            require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount)); // isTransferAllowed checks for frozen assets
+            require(amount <= balanceOf(from), IERC20Errors.ERC20InsufficientBalance(from, balanceOf(from), amount));
+            require(amount <= balanceOf(from) - _frozenTokens[from], ERC7943InsufficientUnfrozenBalance(from, 0, amount, balanceOf(from) - _frozenTokens[from]));
+            require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else { // Burn - Can't burn more than available balance minus frozen tokens
-            uint256 available = balanceOf(from) - _frozenTokens[from];
-            require(amount <= available, ERC7943NotAvailableAmount(from, 0, amount, available));
-        } 
+        } else {
+            _excessFrozenUpdate(from, amount);
+        }
 
         super._update(from, to, amount);
     }

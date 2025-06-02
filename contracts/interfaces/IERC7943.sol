@@ -3,8 +3,7 @@ pragma solidity ^0.8.29;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-/// @title Interface for the ERC-7943 - uRWA Token
-/// @notice Defines the public functions of the uRWA token.
+// @notice Defines the ERC-7943 interface, the uRWA.
 /// When interacting with specific token standards:
 /// - For ERC-721 like (non-fungible) tokens 'amount' parameters typically represent a single token (i.e., 1).
 /// - For ERC-20 like (fungible) tokens, 'tokenId' parameters are generally not applicable and should be set to 0.
@@ -19,8 +18,9 @@ interface IERC7943 is IERC165 {
     /// @notice Emitted when `setFrozen` is called, changing the frozen `amount` of `tokenId` tokens for `user`.
     /// @param user The address of the user whose tokens are being frozen.
     /// @param tokenId The ID of the token being frozen.
-    /// @param amount The amount of tokens frozen.
-    event FrozenChange(address indexed user, uint256 indexed tokenId, uint256 indexed amount);
+    /// @param previousAmount The amount of tokens frozen before the change.
+    /// @param newAmount The amount of tokens frozen after the change.
+    event Frozen(address indexed user, uint256 indexed tokenId, uint256 indexed previousAmount, uint256 newAmount);
 
     /// @notice Error reverted when a user is not allowed to interact. 
     /// @param account The address of the user which is not allowed for interactions.
@@ -33,16 +33,15 @@ interface IERC7943 is IERC165 {
     /// @param amount The amount being transferred.
     error ERC7943NotAllowedTransfer(address from, address to, uint256 tokenId, uint256 amount);
 
-    /// @notice Error reverted when a transfer is attempted from `user` but the `amount` is bigger than available (unfrozen) tokens.
+    /// @notice Error reverted when a transfer is attempted from `user` with an `amount` of `tokenId` less or equal than its balance, but greater than its unfrozen balance.
     /// @param user The address holding the tokens.
     /// @param tokenId The ID of the token being transferred. 
     /// @param amount The amount being transferred.
-    /// @param available The amount of tokens that are available to transfer.
-    error ERC7943NotAvailableAmount(address user, uint256 tokenId, uint256 amount, uint256 available);
+    /// @param unfrozen The amount of tokens that are unfrozen and available to transfer.
+    error ERC7943InsufficientUnfrozenBalance(address user, uint256 tokenId, uint256 amount, uint256 unfrozen);
 
     /// @notice Takes tokens from one address and transfers them to another.
     /// @dev Requires specific authorization. Used for regulatory compliance or recovery scenarios.
-    /// It should skip frozen status validations.
     /// @param from The address from which `amount` is taken.
     /// @param to The address that receives `amount`.
     /// @param tokenId The ID of the token being transferred.
@@ -64,7 +63,7 @@ interface IERC7943 is IERC165 {
     function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount);
  
     /// @notice Checks if a transfer is currently possible according to token rules. It enforces validations on the frozen tokens.
-    /// @dev This may involve checks like allowlists, blocklists, transfer limits etc.
+    /// @dev This may involve checks like allowlists, blocklists, transfer limits and other policy-defined restrictions.
     /// @param from The address sending tokens.
     /// @param to The address receiving tokens. 
     /// @param tokenId The ID of the token being transferred.

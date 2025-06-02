@@ -109,9 +109,12 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
     function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
-        require(amount <= balanceOf(user, tokenId), IERC1155Errors.ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
+        require(amount <= balanceOf(user, tokenId), ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
+        
+        uint256 previousAmount = _frozenTokens[user][tokenId];
         _frozenTokens[user][tokenId] = amount;        
-        emit FrozenChange(user, tokenId, amount);
+
+        emit Frozen(user, tokenId, previousAmount, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -126,6 +129,8 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
         if (from == address(0)) {
             revert ERC1155InvalidSender(address(0));
         }
+
+        _excessFrozenUpdate(from, tokenId, amount);
 
         uint256[] memory ids = new uint256[](1);
         uint256[] memory values = new uint256[](1);
@@ -145,20 +150,24 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
             }
         } 
 
-        // If more than unfrozen amount has been transferred, update frozen amount
-        if(_frozenTokens[from][tokenId] > balanceOf(from, tokenId)) {
-            _frozenTokens[from][tokenId] = balanceOf(from, tokenId);
-            emit FrozenChange(from, tokenId, _frozenTokens[from][tokenId]);
-        }
-
         emit ForcedTransfer(from, to, tokenId, amount);
+    }
+
+    function _excessFrozenUpdate(address user, uint256 tokenId, uint256 amount) internal {
+        uint256 frozenTokensBefore = _frozenTokens[user][tokenId];
+        uint256 unfrozenBalance = balanceOf(user, tokenId) - frozenTokensBefore;
+        if(amount > unfrozenBalance && amount <= balanceOf(user, tokenId)) { 
+            // Protect from underflow: if amount > balanceOf(user) the call will revert in super._update with insufficient balance error
+            _frozenTokens[user][tokenId] -= amount - unfrozenBalance; // Reduce by excess amount
+            emit Frozen(user, tokenId, frozenTokensBefore, _frozenTokens[user][tokenId]);
+        }
     }
 
     /// @notice Hook that is called before any token transfer, including minting and burning.
     /// @dev Overrides the ERC-1155 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting. It also checks
-    /// if the transfer amount is available (unfrozen) for burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser} or {ERC7943NotAvailableAmount} if checks fail.
+    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting.
+    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// token errors if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
     /// @param ids The array of ids.
@@ -168,18 +177,23 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
             revert ERC1155InvalidArrayLength(ids.length, values.length);
         }
 
-        for (uint256 i = 0; i < ids.length; ++i) {
-            if (from != address(0) && to != address(0)) { // Transfer
-                require(isTransferAllowed(from, to, ids[i], values[i]), ERC7943NotAllowedTransfer(from, to, ids[i], values[i]));
+        if (from != address(0) && to != address(0)) { // Transfer
+            for (uint256 i = 0; i < ids.length; ++i) {
+                uint256 id = ids[i];
+                uint256 value = values[i];
+                uint256 unfrozenBalance = balanceOf(from, id) - _frozenTokens[from][id];
+
+                require(value <= balanceOf(from, id), ERC1155InsufficientBalance(from, balanceOf(from, id), value, id));
+                require(value <= unfrozenBalance, ERC7943InsufficientUnfrozenBalance(from, id, value, unfrozenBalance));
+                require(isTransferAllowed(from, to, id, value), ERC7943NotAllowedTransfer(from, to, id, value));
             }
         }
 
         if (from == address(0)) { // Mint 
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         } else if (to == address(0)) { // Burn
-            for (uint256 i = 0; i < ids.length; ++i) {
-                uint256 available = balanceOf(from, ids[i]) - _frozenTokens[from][ids[i]];
-                require(values[i] <= available, ERC7943NotAvailableAmount(from, ids[i], values[i], available));
+            for (uint256 j = 0; j < ids.length; ++j) {
+                _excessFrozenUpdate(from, ids[j], values[j]);
             }
         }
 
