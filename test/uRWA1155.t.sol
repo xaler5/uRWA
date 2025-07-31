@@ -196,7 +196,7 @@ contract uRWA1155Test is Test {
 
         vm.prank(user1);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, frozenAmount, expectedNewFrozenAmount);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, expectedNewFrozenAmount);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC1155.TransferSingle(user1, user1, address(0), TOKEN_ID_1, burnAmount);
         token.burn(TOKEN_ID_1, burnAmount);
@@ -365,7 +365,7 @@ contract uRWA1155Test is Test {
 
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, frozenAmount, expectedNewFrozenAmount);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, expectedNewFrozenAmount);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC1155.TransferSingle(enforcer, user1, user2, TOKEN_ID_1, forceTransferAmount);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -421,7 +421,7 @@ contract uRWA1155Test is Test {
 
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Frozen event - all frozen tokens should be unfrozen
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, MINT_AMOUNT, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC1155.TransferSingle(enforcer, user1, user2, TOKEN_ID_1, MINT_AMOUNT);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -543,19 +543,18 @@ contract uRWA1155Test is Test {
     // --- Enhanced Freeze/Unfreeze Tests ---
 
     function test_SetFrozen_Success_EmitsCorrectEvents() public {
-        uint256 initialFrozen = 0;
         uint256 newFrozenAmount = FREEZE_AMOUNT;
 
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, initialFrozen, newFrozenAmount);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, newFrozenAmount);
         token.setFrozen(user1, TOKEN_ID_1, newFrozenAmount);
 
         // Change frozen amount
         uint256 updatedFrozenAmount = FREEZE_AMOUNT * 2;
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, newFrozenAmount, updatedFrozenAmount);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, updatedFrozenAmount);
         token.setFrozen(user1, TOKEN_ID_1, updatedFrozenAmount);
 
         assertEq(token.getFrozen(user1, TOKEN_ID_1), updatedFrozenAmount);
@@ -569,7 +568,7 @@ contract uRWA1155Test is Test {
         // Then unfreeze them
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, FREEZE_AMOUNT, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         token.setFrozen(user1, TOKEN_ID_1, 0);
 
         assertEq(token.getFrozen(user1, TOKEN_ID_1), 0);

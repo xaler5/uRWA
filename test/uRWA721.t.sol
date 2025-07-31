@@ -216,7 +216,7 @@ contract uRWA721Test is Test {
         // Burn should succeed and unfreeze the token
         vm.prank(user1);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, address(0), TOKEN_ID_1);
         token.burn(TOKEN_ID_1);
@@ -336,7 +336,7 @@ contract uRWA721Test is Test {
 
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
@@ -400,7 +400,7 @@ contract uRWA721Test is Test {
     function test_SetFrozen_Success_FreezeToken() public {
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0, 1);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1);
         token.setFrozen(user1, TOKEN_ID_1, 1);
         assertEq(token.getFrozen(user1, TOKEN_ID_1), 1);
     }
@@ -413,7 +413,7 @@ contract uRWA721Test is Test {
         // Then unfreeze it
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1, 0);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
         token.setFrozen(user1, TOKEN_ID_1, 0);
         assertEq(token.getFrozen(user1, TOKEN_ID_1), 0);
     }
@@ -426,7 +426,7 @@ contract uRWA721Test is Test {
         // Try to "freeze" again (should still emit event)
         vm.prank(enforcer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1, 1);
+        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1);
         token.setFrozen(user1, TOKEN_ID_1, 1);
         assertEq(token.getFrozen(user1, TOKEN_ID_1), 1);
     }
