@@ -148,7 +148,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
             require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
-        } else {
+        } else { // Burn
             _excessFrozenUpdate(from, amount);
         }
 
