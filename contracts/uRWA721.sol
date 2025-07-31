@@ -117,10 +117,9 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
         require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
         require(amount == 0 || amount == 1, InvalidAmount(amount));
         
-        uint8 previousAmount = _frozenTokens[user][tokenId];
         _frozenTokens[user][tokenId] = uint8(amount);
 
-        emit Frozen(user, tokenId, previousAmount, amount);
+        emit Frozen(user, tokenId, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -141,7 +140,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
         _validateCorrectOwner(from, tokenId);
         if(_frozenTokens[from][tokenId] > 0) {
             _frozenTokens[from][tokenId] = 0; // Unfreeze the token if it was frozen
-            emit Frozen(from, tokenId, 1, 0);
+            emit Frozen(from, tokenId, 0);
         }
     }
 

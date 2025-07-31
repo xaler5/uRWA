@@ -111,10 +111,9 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user, tokenId), ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
         
-        uint256 previousAmount = _frozenTokens[user][tokenId];
         _frozenTokens[user][tokenId] = amount;        
 
-        emit Frozen(user, tokenId, previousAmount, amount);
+        emit Frozen(user, tokenId, amount);
     }
 
     /// @inheritdoc IERC7943
@@ -154,12 +153,11 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     }
 
     function _excessFrozenUpdate(address user, uint256 tokenId, uint256 amount) internal {
-        uint256 frozenTokensBefore = _frozenTokens[user][tokenId];
-        uint256 unfrozenBalance = balanceOf(user, tokenId) - frozenTokensBefore;
+        uint256 unfrozenBalance = balanceOf(user, tokenId) - _frozenTokens[user][tokenId];
         if(amount > unfrozenBalance && amount <= balanceOf(user, tokenId)) { 
             // Protect from underflow: if amount > balanceOf(user) the call will revert in super._update with insufficient balance error
             _frozenTokens[user][tokenId] -= amount - unfrozenBalance; // Reduce by excess amount
-            emit Frozen(user, tokenId, frozenTokensBefore, _frozenTokens[user][tokenId]);
+            emit Frozen(user, tokenId, _frozenTokens[user][tokenId]);
         }
     }
 
