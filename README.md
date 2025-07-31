@@ -30,7 +30,7 @@ The `IERC7943` interface defines the following core components:
 
 **Events:**
 *   `ForcedTransfer(address indexed from, address indexed to, uint256 tokenId, uint256 amount)`: Emitted when tokens are forcibly transferred.
-*   `Frozen(address indexed user, uint256 indexed tokenId, uint256 indexed previousAmount, uint256 newAmount);`: Emitted when the freeze status of a user's tokens changes.
+*   `Frozen(address indexed user, uint256 indexed tokenId, uint256 newAmount);`: Emitted when the freeze status of a user's tokens changes.
 
 **Errors:**
 *   `ERC7943NotAllowedUser(address account)`: Reverted if a user is not allowed for an interaction.
