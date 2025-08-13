@@ -12,9 +12,9 @@ This repository contains Solidity implementations of the **uRWA (Universal Real 
 The uRWA standard, as defined by `IERC7943`, aims to provide essential functionalities for RWAs without imposing excessive complexity. Key features of the **reference implementation** and the `IERC7943` interface include:
 
 *   **Whitelisting:** Control which addresses are allowed to interact with the token (see `isUserAllowed` from `IERC7943` and `changeWhitelist` in reference implementations).
-*   **Transfer Control:** Define rules for when transfers are permitted (`isTransferAllowed`).
-*   **Asset Freezing:** Control the ability to freeze and unfreeze portions of a user's token balance or specific token IDs (`setFrozen`, `getFrozen`).
-*   **ForceTransfer Functionality:** Allow authorized parties to forcibly transfer tokens, often necessary for regulatory compliance (`forceTransfer`). The reference implementation skips freezing checks and adjust freezing status accordingly (same for burning functionality).
+*   **Transfer Control:** Define rules for when transfers are permitted (`canTransfer`).
+*   **Asset Freezing:** Control the ability to freeze and unfreeze portions of a user's token balance or specific token IDs (`setFrozenTokens`, `getFrozenTokens`).
+*   **ForcedTransfer Functionality:** Allow authorized parties to forcibly transfer tokens, often necessary for regulatory compliance (`forcedTransfer`). The reference implementation skips freezing checks and adjust freezing status accordingly (same for burning functionality).
 *   **Access Control:** The reference implementations utilize role-based access control (via OpenZeppelin's `AccessControlEnumerable`) to manage permissions for sensitive actions like minting, burning, forced transfers, managing the whitelist, and changing freeze status.
 
 ### Key Interface Elements (`IERC7943`)
@@ -22,10 +22,10 @@ The uRWA standard, as defined by `IERC7943`, aims to provide essential functiona
 The `IERC7943` interface defines the following core components:
 
 **Functions:**
-*   `forceTransfer(address from, address to, uint256 tokenId, uint256 amount)`: Forcibly moves tokens.
-*   `setFrozen(address user, uint256 tokenId, uint256 amount)`: Modifies the amount of frozen tokens for a user.
-*   `getFrozen(address user, uint256 tokenId) returns (uint256 amount)`: Queries the amount of frozen tokens.
-*   `isTransferAllowed(address from, address to, uint256 tokenId, uint256 amount) returns (bool allowed)`: Checks if a standard transfer is permissible.
+*   `forcedTransfer(address from, address to, uint256 tokenId, uint256 amount)`: Forcibly moves tokens.
+*   `setFrozenTokens(address user, uint256 tokenId, uint256 amount)`: Modifies the amount of frozen tokens for a user.
+*   `getFrozenTokens(address user, uint256 tokenId) returns (uint256 amount)`: Queries the amount of frozen tokens.
+*   `canTransfer(address from, address to, uint256 tokenId, uint256 amount) returns (bool allowed)`: Checks if a standard transfer is permissible.
 *   `isUserAllowed(address user) returns (bool allowed)`: Checks if a user is permitted to interact with the token.
 
 **Events:**
@@ -34,7 +34,6 @@ The `IERC7943` interface defines the following core components:
 
 **Errors:**
 *   `ERC7943NotAllowedUser(address account)`: Reverted if a user is not allowed for an interaction.
-*   `ERC7943NotAllowedTransfer(address from, address to, uint256 tokenId, uint256 amount)`: Reverted if a transfer is not permitted by current rules.
 *   `ERC7943InsufficientUnfrozenBalance(address user, uint256 tokenId, uint256 amount, uint256 available)`: Reverted if a transfer attempts to move more tokens than are available (unfrozen).
 
 ## Implementations

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.27;
 
 import {IERC7943} from "./interfaces/IERC7943.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -37,6 +37,9 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a non-zero address but address(0) was provided.
     error NotZeroAddress();
 
+    /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
+    error UnauthorizedTransfer(address from, address to, uint256 tokenId, uint256 amount);
+
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-20 token with name and symbol, and grants all roles
     /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
@@ -53,7 +56,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function isTransferAllowed(address from, address to, uint256, uint256 amount) public virtual view returns (bool allowed) {
+    function canTransfer(address from, address to, uint256, uint256 amount) public virtual view returns (bool allowed) {
         if (amount > balanceOf(from) - _frozenTokens[from]) return false;
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
 
@@ -68,7 +71,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function getFrozen(address user, uint256) public virtual view returns (uint256 amount) {
+    function getFrozenTokens(address user, uint256) public virtual view returns (uint256 amount) {
         amount = _frozenTokens[user];
     }
 
@@ -103,7 +106,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function setFrozen(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+    function setFrozenTokens(address user, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user), IERC20Errors.ERC20InsufficientBalance(user, balanceOf(user), amount));
         _frozenTokens[user] = amount;
         emit Frozen(user, 0, amount);
@@ -111,7 +114,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`.
-    function forceTransfer(address from, address to, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+    function forcedTransfer(address from, address to, uint256, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
 
         _excessFrozenUpdate(from, amount);
@@ -133,8 +136,8 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
 
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-20 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting and burning.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// {canTransfer} for regular transfers and {isUserAllowed} for minting and burning.
+    /// Reverts with {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance}, {UnauthorizedTransfer} or any of the base
     /// token errors if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
@@ -143,7 +146,7 @@ contract uRWA20 is Context, ERC20, AccessControlEnumerable, IERC7943 {
         if (from != address(0) && to != address(0)) { // Transfer
             require(amount <= balanceOf(from), IERC20Errors.ERC20InsufficientBalance(from, balanceOf(from), amount));
             require(amount <= balanceOf(from) - _frozenTokens[from], ERC7943InsufficientUnfrozenBalance(from, 0, amount, balanceOf(from) - _frozenTokens[from]));
-            require(isTransferAllowed(from, to, 0, amount), ERC7943NotAllowedTransfer(from, to, 0, amount));
+            require(canTransfer(from, to, 0, amount), UnauthorizedTransfer(from, to, 0, amount));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         } else { // Burn

@@ -40,6 +40,9 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a non-zero amount but 0 was provided.
     error NotZeroAmount();
 
+    /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
+    error UnauthorizedTransfer(address from, address to, uint256 tokenId, uint256 amount);
+
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-1155 token with a URI and grants all roles
     /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
@@ -55,7 +58,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function isTransferAllowed(address from, address to, uint256 tokenId, uint256 amount) public view virtual override returns (bool allowed) {
+    function canTransfer(address from, address to, uint256 tokenId, uint256 amount) public view virtual override returns (bool allowed) {
         if (balanceOf(from, tokenId) < amount) return false;
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
         if (amount > balanceOf(from, tokenId) - _frozenTokens[from][tokenId]) return false;
@@ -70,7 +73,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount) {
+    function getFrozenTokens(address user, uint256 tokenId) external view returns (uint256 amount) {
         amount = _frozenTokens[user][tokenId];
     }
 
@@ -108,7 +111,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+    function setFrozenTokens(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(amount <= balanceOf(user, tokenId), ERC1155InsufficientBalance(user, balanceOf(user,tokenId), amount, tokenId));
         
         _frozenTokens[user][tokenId] = amount;        
@@ -118,7 +121,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`.
-    function forceTransfer(address from, address to, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+    function forcedTransfer(address from, address to, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
 
         // Reimplementing _safeTransferFrom to avoid the check on _update
@@ -163,8 +166,8 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
 
     /// @notice Hook that is called before any token transfer, including minting and burning.
     /// @dev Overrides the ERC-1155 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// {canTransfer} for regular transfers and {isUserAllowed} for minting.
+    /// Reverts with {ERC7943NotAllowedUser}, {ERC7943InsufficientUnfrozenBalance}, {UnauthorizedTransfer} or any of the base
     /// token errors if checks fail.
     /// @param from The address sending tokens (zero address for minting).
     /// @param to The address receiving tokens (zero address for burning).
@@ -183,7 +186,7 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943 {
 
                 require(value <= balanceOf(from, id), ERC1155InsufficientBalance(from, balanceOf(from, id), value, id));
                 require(value <= unfrozenBalance, ERC7943InsufficientUnfrozenBalance(from, id, value, unfrozenBalance));
-                require(isTransferAllowed(from, to, id, value), ERC7943NotAllowedTransfer(from, to, id, value));
+                require(canTransfer(from, to, id, value), UnauthorizedTransfer(from, to, id, value));
             }
         }
 

@@ -40,6 +40,9 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     /// @notice Error reverted when an operation requires a 0/1 amount but something else was provided.
     error InvalidAmount(uint256 amount);
 
+    /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
+    error UnauthorizedTransfer(address from, address to, uint256 tokenId, uint256 amount);
+
     /// @notice Contract constructor.
     /// @dev Initializes the ERC-721 token with name and symbol, and grants all roles
     /// (Admin, Minter, Burner, Enforcer, Whitelist) to the `initialAdmin`.
@@ -64,7 +67,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function isTransferAllowed(address from, address to, uint256 tokenId, uint256) public view virtual override returns (bool allowed) {
+    function canTransfer(address from, address to, uint256 tokenId, uint256) public view virtual override returns (bool allowed) {
         address owner = _ownerOf(tokenId);
         if (owner != from || owner == address(0)) return false; // Use internal function to avoid reverting for non existing tokenIds
         if (!isUserAllowed(from) || !isUserAllowed(to)) return false;
@@ -74,7 +77,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
     }
 
     /// @inheritdoc IERC7943
-    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount) {
+    function getFrozenTokens(address user, uint256 tokenId) external view returns (uint256 amount) {
         amount = _frozenTokens[user][tokenId];
     }
 
@@ -113,7 +116,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`
-    function setFrozen(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
+    function setFrozenTokens(address user, uint256 tokenId, uint256 amount) public onlyRole(ENFORCER_ROLE) {
         require(user == ownerOf(tokenId), IERC721Errors.ERC721InvalidOwner(user));
         require(amount == 0 || amount == 1, InvalidAmount(amount));
         
@@ -124,7 +127,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
 
     /// @inheritdoc IERC7943
     /// @dev Can only be called by accounts holding the `ENFORCER_ROLE`.
-    function forceTransfer(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(ENFORCER_ROLE) {
+    function forcedTransfer(address from, address to, uint256 tokenId, uint256) public virtual override onlyRole(ENFORCER_ROLE) {
         require(to != address(0), ERC721InvalidReceiver(address(0)));
         require(isUserAllowed(to), ERC7943NotAllowedUser(to));
 
@@ -152,8 +155,8 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
 
     /// @notice Hook that is called during any token transfer, including minting and burning.
     /// @dev Overrides the ERC-721 `_update` hook. Enforces transfer restrictions based on
-    /// {isTransferAllowed} for regular transfers and {isUserAllowed} for minting.
-    /// Reverts with {ERC7943NotAllowedTransfer}, {ERC7943NotAllowedUser}. {ERC7943InsufficientUnfrozenBalance} or any of the base
+    /// {canTransfer} for regular transfers and {isUserAllowed} for minting.
+    /// Reverts with {ERC7943NotAllowedUser}. {ERC7943InsufficientUnfrozenBalance}, {UnauthorizedTransfer} or any of the base
     /// token errors if checks fail.
     /// @param to The address receiving tokens (zero address for burning).
     /// @param tokenId The if of the token being transferred.
@@ -168,7 +171,7 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943 {
         if (from != address(0) && to != address(0)) { // Transfer
             _validateCorrectOwner(from, tokenId);
             require(_frozenTokens[from][tokenId] == 0, ERC7943InsufficientUnfrozenBalance(from, tokenId, 1, 0));
-            require(isTransferAllowed(from, to, tokenId, 1), ERC7943NotAllowedTransfer(from, to, tokenId, 1));
+            require(canTransfer(from, to, tokenId, 1), UnauthorizedTransfer(from, to, tokenId, 1));
         } else if (from == address(0)) { // Mint
             require(isUserAllowed(to), ERC7943NotAllowedUser(to));
         } else {
