@@ -13,9 +13,9 @@ interface IERC7943 is IERC165 {
     /// @param to The address to which seized tokens were transferred.
     /// @param tokenId The ID of the token being transferred.
     /// @param amount The amount seized.
-    event ForcedTransfer(address indexed from, address indexed to, uint256 tokenId, uint256 amount);
+    event ForcedTransfer(address indexed from, address indexed to, uint256 indexed tokenId, uint256 amount);
 
-    /// @notice Emitted when `setFrozen` is called, changing the frozen `amount` of `tokenId` tokens for `user`.
+    /// @notice Emitted when `setFrozenTokens` is called, changing the frozen `amount` of `tokenId` tokens for `user`.
     /// @param user The address of the user whose tokens are being frozen.
     /// @param tokenId The ID of the token being frozen.
     /// @param amount The amount of tokens frozen after the change.
@@ -24,13 +24,6 @@ interface IERC7943 is IERC165 {
     /// @notice Error reverted when a user is not allowed to interact. 
     /// @param account The address of the user which is not allowed for interactions.
     error ERC7943NotAllowedUser(address account);
-
-    /// @notice Error reverted when a transfer is not allowed due to restrictions in place.
-    /// @param from The address from which tokens are being transferred.
-    /// @param to The address to which tokens are being transferred.
-    /// @param tokenId The ID of the token being transferred. 
-    /// @param amount The amount being transferred.
-    error ERC7943NotAllowedTransfer(address from, address to, uint256 tokenId, uint256 amount);
 
     /// @notice Error reverted when a transfer is attempted from `user` with an `amount` of `tokenId` less or equal than its balance, but greater than its unfrozen balance.
     /// @param user The address holding the tokens.
@@ -45,7 +38,7 @@ interface IERC7943 is IERC165 {
     /// @param to The address that receives `amount`.
     /// @param tokenId The ID of the token being transferred.
     /// @param amount The amount to force transfer.
-    function forceTransfer(address from, address to, uint256 tokenId, uint256 amount) external;
+    function forcedTransfer(address from, address to, uint256 tokenId, uint256 amount) external;
 
     /// @notice Changes the frozen status of `amount` of `tokenId` tokens belonging to an `user`.
     /// This overwrites the current value, similar to an `approve` function.
@@ -53,13 +46,13 @@ interface IERC7943 is IERC165 {
     /// @param user The address of the user whose tokens are to be frozen/unfrozen.
     /// @param tokenId The ID of the token to freeze/unfreeze.
     /// @param amount The amount of tokens to freeze/unfreeze. 
-    function setFrozen(address user, uint256 tokenId, uint256 amount) external;
+    function setFrozenTokens(address user, uint256 tokenId, uint256 amount) external;
 
     /// @notice Checks the frozen status/amount of a specific `tokenId`.
     /// @param user The address of the user.
     /// @param tokenId The ID of the token.
     /// @return amount The amount of `tokenId` tokens currently frozen for `user`.
-    function getFrozen(address user, uint256 tokenId) external view returns (uint256 amount);
+    function getFrozenTokens(address user, uint256 tokenId) external view returns (uint256 amount);
  
     /// @notice Checks if a transfer is currently possible according to token rules. It enforces validations on the frozen tokens.
     /// @dev This may involve checks like allowlists, blocklists, transfer limits and other policy-defined restrictions.
@@ -68,7 +61,7 @@ interface IERC7943 is IERC165 {
     /// @param tokenId The ID of the token being transferred.
     /// @param amount The amount being transferred.
     /// @return allowed True if the transfer is allowed, false otherwise.
-    function isTransferAllowed(address from, address to, uint256 tokenId, uint256 amount) external view returns (bool allowed);
+    function canTransfer(address from, address to, uint256 tokenId, uint256 amount) external view returns (bool allowed);
 
     /// @notice Checks if a specific user is allowed to interact with the token.
     /// @dev This is often used for allowlist/KYC checks.
