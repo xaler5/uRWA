@@ -14,7 +14,7 @@ contract MockERC1155Receiver is IERC1155Receiver {
 
     function onERC1155Received(address, address, uint256, uint256, bytes memory) public view override returns (bytes4) {
         if (shouldReject) {
-            return bytes4(0); // Indicate rejection
+            return bytes4(0);
         } else {
             return ERC1155_RECEIVER_MAGIC;
         }
@@ -22,7 +22,7 @@ contract MockERC1155Receiver is IERC1155Receiver {
 
     function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public view override returns (bytes4) {
         if (shouldReject) {
-            return bytes4(0); // Indicate rejection
+            return bytes4(0);
         } else {
             return ERC1155_BATCH_RECEIVER_MAGIC;
         }

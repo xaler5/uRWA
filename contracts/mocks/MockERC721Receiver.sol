@@ -12,7 +12,7 @@ contract MockERC721Receiver is IERC721Receiver {
 
     function onERC721Received(address, address, uint256, bytes memory) public view override returns (bytes4) {
         if (shouldReject) {
-            return bytes4(0); // Indicate rejection
+            return bytes4(0);
         } else {
             return ERC721_RECEIVER_MAGIC;
         }

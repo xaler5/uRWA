@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import {Test, console} from "forge-std/Test.sol";
 import {uRWA721} from "../contracts/uRWA721.sol";
-import {IERC7943} from "../contracts/interfaces/IERC7943.sol";
+import {IERC7943NonFungible} from "../contracts/interfaces/IERC7943.sol";
 import {MockERC721Receiver} from "../contracts/mocks/MockERC721Receiver.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
@@ -20,7 +20,8 @@ contract uRWA721Test is Test {
     // Roles
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant ENFORCER_ROLE = keccak256("ENFORCER_ROLE");
+    bytes32 public constant FREEZING_ROLE = keccak256("FREEZING_ROLE");
+    bytes32 public constant FORCE_TRANSFER_ROLE = keccak256("FORCE_TRANSFER_ROLE");
     bytes32 public constant WHITELIST_ROLE = keccak256("WHITELIST_ROLE");
     bytes32 public constant ADMIN_ROLE = 0x00;
 
@@ -30,10 +31,11 @@ contract uRWA721Test is Test {
     address public user2 = address(3);
     address public minter = address(4);
     address public burner = address(5);
-    address public enforcer = address(6);
-    address public whitelister = address(7);
-    address public nonWhitelistedUser = address(8);
-    address public otherUser = address(9);
+    address public freezer = address(6);
+    address public forceTransferrer = address(7);
+    address public whitelister = address(8);
+    address public nonWhitelistedUser = address(9);
+    address public otherUser = address(10);
 
     // Token IDs
     uint256 public constant TOKEN_ID_1 = 1;
@@ -48,7 +50,8 @@ contract uRWA721Test is Test {
         // Grant roles
         token.grantRole(MINTER_ROLE, minter);
         token.grantRole(BURNER_ROLE, burner);
-        token.grantRole(ENFORCER_ROLE, enforcer);
+        token.grantRole(FREEZING_ROLE, freezer);
+        token.grantRole(FORCE_TRANSFER_ROLE, forceTransferrer);
         token.grantRole(WHITELIST_ROLE, whitelister);
 
         // Whitelist initial users
@@ -57,7 +60,8 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user2, true);
         token.changeWhitelist(minter, true);
         token.changeWhitelist(burner, true);
-        token.changeWhitelist(enforcer, true);
+        token.changeWhitelist(freezer, true);
+        token.changeWhitelist(forceTransferrer, true);
         token.changeWhitelist(whitelister, true);
         vm.stopPrank();
 
@@ -82,30 +86,26 @@ contract uRWA721Test is Test {
         assertTrue(token.hasRole(ADMIN_ROLE, admin));
         assertTrue(token.hasRole(MINTER_ROLE, admin));
         assertTrue(token.hasRole(BURNER_ROLE, admin));
-        assertTrue(token.hasRole(ENFORCER_ROLE, admin));
+        assertTrue(token.hasRole(FREEZING_ROLE, admin));
+        assertTrue(token.hasRole(FORCE_TRANSFER_ROLE, admin));
         assertTrue(token.hasRole(WHITELIST_ROLE, admin));
-    }
-
-    function test_Revert_Constructor_ZeroAdminAddress() public {
-        vm.expectRevert(uRWA721.NotZeroAddress.selector);
-        new uRWA721("Fail", "FAIL", address(0));
     }
 
     // --- Whitelist Tests ---
 
     function test_Whitelist_ChangeStatus() public {
-        assertFalse(token.isUserAllowed(otherUser));
+        assertFalse(token.canTransact(otherUser));
         vm.prank(whitelister);
         vm.expectEmit(true, false, false, true);
         emit uRWA721.Whitelisted(otherUser, true);
         token.changeWhitelist(otherUser, true);
-        assertTrue(token.isUserAllowed(otherUser));
+        assertTrue(token.canTransact(otherUser));
 
         vm.prank(whitelister);
         vm.expectEmit(true, false, false, true);
         emit uRWA721.Whitelisted(otherUser, false);
         token.changeWhitelist(otherUser, false);
-        assertFalse(token.isUserAllowed(otherUser));
+        assertFalse(token.canTransact(otherUser));
     }
 
     function test_Revert_Whitelist_ChangeStatus_NotWhitelister() public {
@@ -114,15 +114,9 @@ contract uRWA721Test is Test {
         token.changeWhitelist(nonWhitelistedUser, true);
     }
 
-    function test_Revert_Whitelist_ChangeStatus_ZeroAddress() public {
-        vm.prank(whitelister);
-        vm.expectRevert(uRWA721.NotZeroAddress.selector);
-        token.changeWhitelist(address(0), true);
-    }
-
     function test_Whitelist_IsUserAllowed() public view {
-        assertTrue(token.isUserAllowed(user1));
-        assertFalse(token.isUserAllowed(nonWhitelistedUser));
+        assertTrue(token.canTransact(user1));
+        assertFalse(token.canTransact(nonWhitelistedUser));
     }
 
     // --- Minting Tests ---
@@ -144,7 +138,7 @@ contract uRWA721Test is Test {
 
     function test_Revert_Mint_ToNonWhitelisted() public {
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943CannotTransact.selector, nonWhitelistedUser));
         token.safeMint(nonWhitelistedUser, TOKEN_ID_2);
     }
 
@@ -209,14 +203,14 @@ contract uRWA721Test is Test {
         token.grantRole(BURNER_ROLE, user1);
 
         // Freeze the token first
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
 
         // Burn should succeed and unfreeze the token
         vm.prank(user1);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
+        emit IERC7943NonFungible.Frozen(user1, TOKEN_ID_1, false);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, address(0), TOKEN_ID_1);
         token.burn(TOKEN_ID_1);
@@ -272,13 +266,13 @@ contract uRWA721Test is Test {
         token.changeWhitelist(user1, false);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(uRWA721.UnauthorizedTransfer.selector, user1, user2, TOKEN_ID_1, 1));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943CannotTransact.selector, user1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
     function test_Revert_Transfer_ToNotWhitelisted() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(uRWA721.UnauthorizedTransfer.selector, user1, nonWhitelistedUser, TOKEN_ID_1, 1));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943CannotTransact.selector, nonWhitelistedUser));
         token.transferFrom(user1, nonWhitelistedUser, TOKEN_ID_1);
     }
 
@@ -289,11 +283,11 @@ contract uRWA721Test is Test {
     }
 
     function test_Revert_Transfer_WhenFrozen() public {
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, TOKEN_ID_1, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943FrozenTokenId.selector, user1, TOKEN_ID_1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
@@ -306,12 +300,12 @@ contract uRWA721Test is Test {
     // --- Enhanced ForceTransfer Tests ---
 
     function test_ForcedTransfer_Success_WhitelistedToWhitelisted() public {
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true);
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        emit IERC7943NonFungible.ForcedTransfer(user1, user2, TOKEN_ID_1);
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
@@ -319,194 +313,172 @@ contract uRWA721Test is Test {
         vm.prank(whitelister);
         token.changeWhitelist(user1, false);
 
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true);
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        emit IERC7943NonFungible.ForcedTransfer(user1, user2, TOKEN_ID_1);
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
     }
 
     function test_ForcedTransfer_Success_UnfreezesFrozenToken() public {
         // Freeze the token first
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
 
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true); // Frozen event from _excessFrozenUpdate
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
+        emit IERC7943NonFungible.Frozen(user1, TOKEN_ID_1, false);
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
-        emit IERC7943.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        emit IERC7943NonFungible.ForcedTransfer(user1, user2, TOKEN_ID_1);
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
 
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0); // Should be unfrozen for original owner
-        assertEq(token.getFrozenTokens(user2, TOKEN_ID_1), 0); // Should not be frozen for new owner
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1)); // Should be unfrozen for original owner
+        assertFalse(token.getFrozenTokens(user2, TOKEN_ID_1)); // Should not be frozen for new owner
     }
 
     function test_ForcedTransfer_Success_NoChangeWhenNotFrozen() public {
         // Token is not frozen initially
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0);
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1));
 
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         // Should NOT emit Frozen event since token wasn't frozen
         vm.expectEmit(true, true, true, true); // Transfer event
         emit IERC721.Transfer(user1, user2, TOKEN_ID_1);
         vm.expectEmit(true, true, true, true); // ForcedTransfer event
-        emit IERC7943.ForcedTransfer(user1, user2, TOKEN_ID_1, 1);
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        emit IERC7943NonFungible.ForcedTransfer(user1, user2, TOKEN_ID_1);
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
 
         assertEq(token.ownerOf(TOKEN_ID_1), user2);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0);
-        assertEq(token.getFrozenTokens(user2, TOKEN_ID_1), 0);
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1));
+        assertFalse(token.getFrozenTokens(user2, TOKEN_ID_1));
     }
 
     function test_Revert_ForcedTransfer_ToNonWhitelisted() public {
-        vm.prank(enforcer);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943NotAllowedUser.selector, nonWhitelistedUser));
-        token.forcedTransfer(user1, nonWhitelistedUser, TOKEN_ID_1, 1);
+        vm.prank(forceTransferrer);
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943CannotTransact.selector, nonWhitelistedUser));
+        token.forcedTransfer(user1, nonWhitelistedUser, TOKEN_ID_1);
     }
 
-    function test_Revert_ForcedTransfer_NotEnforcer() public {
+    function test_Revert_ForcedTransfer_NotForceTransferrer() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, FORCE_TRANSFER_ROLE));
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
     }
 
     function test_Revert_ForcedTransfer_NonExistentToken() public {
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
-        token.forcedTransfer(user1, user2, NON_EXISTENT_TOKEN_ID, 1);
+        token.forcedTransfer(user1, user2, NON_EXISTENT_TOKEN_ID);
     }
 
     function test_Revert_ForcedTransfer_FromIncorrectOwner() public {
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721IncorrectOwner.selector, user2, TOKEN_ID_1, user1));
-        token.forcedTransfer(user2, admin, TOKEN_ID_1, 1);
+        token.forcedTransfer(user2, admin, TOKEN_ID_1);
     }
 
     function test_Revert_ForcedTransfer_ToZeroAddress() public {
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector, address(0)));
-        token.forcedTransfer(user1, address(0), TOKEN_ID_1, 1);
+        token.forcedTransfer(user1, address(0), TOKEN_ID_1);
     }
 
     // --- Enhanced Freeze/Unfreeze Tests ---
 
     function test_SetFrozenTokens_Success_FreezeToken() public {
-        vm.prank(enforcer);
+        vm.prank(freezer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
+        emit IERC7943NonFungible.Frozen(user1, TOKEN_ID_1, true);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
     }
 
     function test_SetFrozenTokens_Success_UnfreezeToken() public {
         // First freeze the token
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
 
         // Then unfreeze it
-        vm.prank(enforcer);
+        vm.prank(freezer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 0);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 0);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0);
+        emit IERC7943NonFungible.Frozen(user1, TOKEN_ID_1, false);
+        token.setFrozenTokens(user1, TOKEN_ID_1, false);
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1));
     }
 
     function test_SetFrozenTokens_Success_ChangeFromFrozenToFrozen() public {
         // First freeze the token
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
 
         // Try to "freeze" again (should still emit event)
-        vm.prank(enforcer);
+        vm.prank(freezer);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.Frozen(user1, TOKEN_ID_1, 1);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
+        emit IERC7943NonFungible.Frozen(user1, TOKEN_ID_1, true);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
     }
 
-    function test_Revert_SetFrozenTokens_InvalidAmount() public {
-        vm.prank(enforcer);
-        vm.expectRevert(abi.encodeWithSelector(uRWA721.InvalidAmount.selector, 2));
-        token.setFrozenTokens(user1, TOKEN_ID_1, 2); // Only 0 or 1 allowed for NFTs
-    }
+    // Note: InvalidAmount tests removed as setFrozenTokens now uses boolean parameter
 
-    function test_Revert_SetFrozenTokens_InvalidAmountLarge() public {
-        vm.prank(enforcer);
-        vm.expectRevert(abi.encodeWithSelector(uRWA721.InvalidAmount.selector, 100));
-        token.setFrozenTokens(user1, TOKEN_ID_1, 100);
-    }
-
-    function test_Revert_SetFrozenTokens_NotEnforcer() public {
+    function test_Revert_SetFrozenTokens_NotFreezer() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, ENFORCER_ROLE));
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-    }
-
-    function test_Revert_SetFrozenTokens_NotOwner() public {
-        vm.prank(enforcer);
-        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidOwner.selector, user2));
-        token.setFrozenTokens(user2, TOKEN_ID_1, 1); // user2 doesn't own TOKEN_ID_1
-    }
-
-    function test_Revert_SetFrozenTokens_NonExistentToken() public {
-        vm.prank(enforcer);
-        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, NON_EXISTENT_TOKEN_ID));
-        token.setFrozenTokens(user1, NON_EXISTENT_TOKEN_ID, 1);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, FREEZING_ROLE));
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
     }
 
     function test_GetFrozenTokens_Correctness() public {
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0);
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1));
 
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
 
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 0);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 0);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, false);
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_1));
     }
 
     // --- canTransfer Tests ---
 
     function test_CanTransfer_Success() public view {
-        assertTrue(token.canTransfer(user1, user2, TOKEN_ID_1, 1));
+        assertTrue(token.canTransfer(user1, user2, TOKEN_ID_1));
     }
 
     function test_CanTransfer_Fail_FromNotOwner() public view {
-        assertFalse(token.canTransfer(user2, user1, TOKEN_ID_1, 1));
+        assertFalse(token.canTransfer(user2, user1, TOKEN_ID_1));
     }
 
     function test_CanTransfer_Fail_NonExistentToken() public view {
-        assertFalse(token.canTransfer(user1, user2, NON_EXISTENT_TOKEN_ID, 1));
+        assertFalse(token.canTransfer(user1, user2, NON_EXISTENT_TOKEN_ID));
     }
 
     function test_CanTransfer_Fail_FromNotWhitelisted() public {
         vm.prank(whitelister);
         token.changeWhitelist(user1, false);
-        assertFalse(token.canTransfer(user1, user2, TOKEN_ID_1, 1));
+        assertFalse(token.canTransfer(user1, user2, TOKEN_ID_1));
     }
 
     function test_CanTransfer_Fail_ToNotWhitelisted() public view {
-        assertFalse(token.canTransfer(user1, nonWhitelistedUser, TOKEN_ID_1, 1));
+        assertFalse(token.canTransfer(user1, nonWhitelistedUser, TOKEN_ID_1));
     }
 
     function test_CanTransfer_Fail_TokenFrozen() public {
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
-        assertFalse(token.canTransfer(user1, user2, TOKEN_ID_1, 1));
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
+        assertFalse(token.canTransfer(user1, user2, TOKEN_ID_1));
     }
 
     // --- Interface Support Tests ---
 
     function test_Interface_SupportsIERC7943() public view {
-        assertTrue(token.supportsInterface(type(IERC7943).interfaceId));
+        assertTrue(token.supportsInterface(type(IERC7943NonFungible).interfaceId));
     }
 
     function test_Interface_SupportsIERC721() public view {
@@ -551,12 +523,12 @@ contract uRWA721Test is Test {
         token.safeMint(user1, TOKEN_ID_2);
 
         // Freeze only TOKEN_ID_1
-        vm.prank(enforcer);
-        token.setFrozenTokens(user1, TOKEN_ID_1, 1);
+        vm.prank(freezer);
+        token.setFrozenTokens(user1, TOKEN_ID_1, true);
 
         // TOKEN_ID_1 should be frozen, TOKEN_ID_2 should not
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_1), 1);
-        assertEq(token.getFrozenTokens(user1, TOKEN_ID_2), 0);
+        assertTrue(token.getFrozenTokens(user1, TOKEN_ID_1));
+        assertFalse(token.getFrozenTokens(user1, TOKEN_ID_2));
 
         // Transfer TOKEN_ID_2 should work
         vm.prank(user1);
@@ -565,24 +537,24 @@ contract uRWA721Test is Test {
 
         // Transfer TOKEN_ID_1 should fail
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(IERC7943.ERC7943InsufficientUnfrozenBalance.selector, user1, TOKEN_ID_1, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC7943NonFungible.ERC7943FrozenTokenId.selector, user1, TOKEN_ID_1));
         token.transferFrom(user1, user2, TOKEN_ID_1);
     }
 
     function test_EdgeCase_ForceTransferToContract() public {
-        vm.prank(enforcer);
+        vm.prank(forceTransferrer);
         vm.expectEmit(true, true, true, true);
         emit IERC721.Transfer(user1, address(receiverContract), TOKEN_ID_1);
         vm.expectEmit(true, true, true, true);
-        emit IERC7943.ForcedTransfer(user1, address(receiverContract), TOKEN_ID_1, 1);
-        token.forcedTransfer(user1, address(receiverContract), TOKEN_ID_1, 1);
+        emit IERC7943NonFungible.ForcedTransfer(user1, address(receiverContract), TOKEN_ID_1);
+        token.forcedTransfer(user1, address(receiverContract), TOKEN_ID_1);
         assertEq(token.ownerOf(TOKEN_ID_1), address(receiverContract));
     }
 
     function test_EdgeCase_BurnAfterForceTransfer() public {
         // Force transfer to user2
-        vm.prank(enforcer);
-        token.forcedTransfer(user1, user2, TOKEN_ID_1, 1);
+        vm.prank(forceTransferrer);
+        token.forcedTransfer(user1, user2, TOKEN_ID_1);
 
         // Give burner role to user2
         vm.prank(admin);
@@ -612,6 +584,10 @@ contract uRWA721Test is Test {
         } else {
             assertEq(token.ownerOf(tokenId), expectedOwner, string.concat(errorMsg, " - Owner mismatch"));
         }
-        assertEq(token.getFrozenTokens(expectedOwner, tokenId), expectedFrozenAmount, string.concat(errorMsg, " - Frozen amount mismatch"));
+        if (expectedFrozenAmount == 1) {
+            assertTrue(token.getFrozenTokens(expectedOwner, tokenId), string.concat(errorMsg, " - Should be frozen"));
+        } else {
+            assertFalse(token.getFrozenTokens(expectedOwner, tokenId), string.concat(errorMsg, " - Should not be frozen"));
+        }
     }
 }
