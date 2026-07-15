@@ -20,6 +20,22 @@ contract uRWA20Pausable is uRWA20, Pausable {
         super._update(from, to, amount);
     }
 
+    /// @notice While paused, transfers are not possible, so `canTransfer` reports
+    /// false. It deliberately returns rather than using `whenNotPaused`, since
+    /// ERC-7943 requires this view to never revert.
+    function canTransfer(address from, address to, uint256 amount)
+        public
+        view
+        virtual
+        override
+        returns (bool allowed)
+    {
+        if (paused()) {
+            return false;
+        }
+        return super.canTransfer(from, to, amount);
+    }
+
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
