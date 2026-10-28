@@ -894,7 +894,11 @@ contract uRWA20Test is Test {
         assertFalse(token.canTransfer(user1, nonWhitelistedUser, TRANSFER_AMOUNT));
     }
 
-    function test_CanTransfer_Fail_ZeroAddress() public view {
+    /// @dev A zero `to` is the burn pre-flight: only the sender is checked.
+    function test_CanTransfer_ZeroAddress_IsBurnPreflight() public {
+        assertTrue(token.canTransfer(user1, address(0), TRANSFER_AMOUNT));
+        vm.prank(whitelister);
+        token.changeSendWhitelist(user1, false);
         assertFalse(token.canTransfer(user1, address(0), TRANSFER_AMOUNT));
     }
 

@@ -58,9 +58,10 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943NonFungibl
     }
 
     /// @inheritdoc IERC7943NonFungible
+    /// @dev With a zero `from` this is the pre-flight for minting `tokenId`, which must not exist yet.
     function canTransfer(address from, address to, uint256 tokenId) public view virtual override returns (bool allowed) {
         address owner = _ownerOf(tokenId);
-        if (owner != from || owner == address(0)) return allowed;
+        if (owner != from) return allowed;
         if (getFrozenTokens(from, tokenId)) return allowed;
         if (!canSend(from) || !canReceive(to)) return allowed;
 
@@ -68,13 +69,19 @@ contract uRWA721 is Context, ERC721, AccessControlEnumerable, IERC7943NonFungibl
     }
 
     /// @inheritdoc IERC7943NonFungible
+    /// @dev The zero address always passes: it is the source of a mint and the sink of a burn. This keeps
+    /// {canTransfer} running both account checks, as ERC-7943 requires, while a mint pre-flight
+    /// (`from` = 0) depends only on the recipient and a burn pre-flight (`to` = 0) only on the holder.
+    /// Movements that are invalid for the base standard (e.g. a plain transfer to the zero address) are
+    /// still rejected by it.
     function canSend(address account) public view virtual override returns (bool allowed) {
-        allowed = _sendWhitelist[account];
+        allowed = account == address(0) || _sendWhitelist[account];
     }
 
     /// @inheritdoc IERC7943NonFungible
+    /// @dev The zero address always passes; see {canSend}.
     function canReceive(address account) public view virtual override returns (bool allowed) {
-        allowed = _receiveWhitelist[account];
+        allowed = account == address(0) || _receiveWhitelist[account];
     }
 
     /// @inheritdoc IERC7943NonFungible

@@ -933,6 +933,20 @@ contract uRWA1155Test is Test {
         assertFalse(token.canTransfer(user1, user2, TOKEN_ID_1, TRANSFER_AMOUNT));
     }
 
+    function test_CanTransfer_ZeroAddress_IsMintPreflight() public view {
+        assertTrue(token.canSend(address(0)));
+        assertTrue(token.canTransfer(address(0), user2, TOKEN_ID_1, TRANSFER_AMOUNT));
+        assertFalse(token.canTransfer(address(0), nonWhitelistedUser, TOKEN_ID_1, TRANSFER_AMOUNT));
+    }
+
+    function test_CanTransfer_ZeroAddress_IsBurnPreflight() public {
+        assertTrue(token.canReceive(address(0)));
+        assertTrue(token.canTransfer(user1, address(0), TOKEN_ID_1, TRANSFER_AMOUNT));
+        vm.prank(whitelister);
+        token.changeSendWhitelist(user1, false);
+        assertFalse(token.canTransfer(user1, address(0), TOKEN_ID_1, TRANSFER_AMOUNT));
+    }
+
     // --- canSend / canReceive Tests ---
 
     function test_CanSend_Success() public view {

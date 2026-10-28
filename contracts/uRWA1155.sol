@@ -69,13 +69,19 @@ contract uRWA1155 is Context, ERC1155, AccessControlEnumerable, IERC7943MultiTok
     }
 
     /// @inheritdoc IERC7943MultiToken
+    /// @dev The zero address always passes: it is the source of a mint and the sink of a burn. This keeps
+    /// {canTransfer} running both account checks, as ERC-7943 requires, while a mint pre-flight
+    /// (`from` = 0) depends only on the recipient and a burn pre-flight (`to` = 0) only on the holder.
+    /// Movements that are invalid for the base standard (e.g. a plain transfer to the zero address) are
+    /// still rejected by it.
     function canSend(address account) public view virtual override returns (bool allowed) {
-        allowed = _sendWhitelist[account];
+        allowed = account == address(0) || _sendWhitelist[account];
     }
 
     /// @inheritdoc IERC7943MultiToken
+    /// @dev The zero address always passes; see {canSend}.
     function canReceive(address account) public view virtual override returns (bool allowed) {
-        allowed = _receiveWhitelist[account];
+        allowed = account == address(0) || _receiveWhitelist[account];
     }
 
     /// @inheritdoc IERC7943MultiToken
