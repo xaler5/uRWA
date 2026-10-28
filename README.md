@@ -61,6 +61,12 @@ This repository provides three primary implementations:
 
 ERC-7943 is Final. For the full specification and rationale, refer to [ERC-7943 on eips.ethereum.org](https://eips.ethereum.org/EIPS/eip-7943) or the local copy: [`EIP-7943.md`](EIP-7943.md).
 
+## Conformance tests
+
+[`test/conformance/`](test/conformance/) holds one suite per token type. Each case states what `canTransfer` predicts and what the real movement does: ordinary and operator transfers, one-way send/receive restrictions, frozen amounts, balance shortfalls (left to the base standard), mint and burn pre-flights, the exceptions permissioned mints, burns and forced transfers may take, and fuzzed parity between the pre-flight and the real call.
+
+They are written against the reference contracts, but the cases are meant to be reusable: if you maintain another ERC-7943 implementation, or a policy contract behind one, porting these cases is the quickest way to check you agree with the reference. Cases we have missed are very welcome as PRs.
+
 ## Development
 
 This project uses the [Foundry](https://github.com/foundry-rs/foundry) development toolkit.

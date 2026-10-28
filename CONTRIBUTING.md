@@ -5,7 +5,7 @@ Thanks for helping out. This repository is the standalone reference implementati
 ## What helps most
 
 - **Bug reports**, especially anything where a contract does something the spec forbids. Please include a failing Foundry test if you can.
-- **Conformance cases**: if you maintain another ERC-7943 implementation and found a case where it and this one disagree, that case belongs in the tests.
+- **Conformance cases** in [`test/conformance/`](test/conformance/). If you maintain another ERC-7943 implementation and found a case where it and this one disagree, that case belongs here.
 - **Extensions** under `contracts/modules/`, kept small and optional.
 - **Docs** fixes.
 
