@@ -5,6 +5,14 @@ This repository contains Solidity implementations of the **uRWA (Universal Real 
 
 The canonical ERC-7943 specification and reference assets are maintained in [`ethereum/ERCs`](https://github.com/ethereum/ERCs); this standalone repository mirrors and extends those assets.
 
+### Differences from the `ethereum/ERCs` assets
+
+The interface and ERC-165 identifiers are identical to Final ERC-7943. The implementations differ in a few places, which we intend to propose upstream:
+
+*   **Mint/burn pre-flights:** the zero address always passes `canSend` and `canReceive`, as the source of a mint and the sink of a burn. `canTransfer` still runs both checks, as ERC-7943 requires, so `canTransfer(address(0), to, ...)` is a mint pre-flight that depends only on `to`, and `canTransfer(from, address(0), ...)` a burn pre-flight that depends only on `from`. A plain transfer to the zero address is still rejected by the base standard.
+*   **uRWA1155 batch freeze check:** a batch that repeats the same id is checked against the running total for that id, so it cannot move frozen tokens (see [ethereum/ERCs#1814](https://github.com/ethereum/ERCs/issues/1814)).
+*   **Extensions:** the `uRWA20Pausable`, `uRWA20Metadata` and `uRWA20Multicall` modules live only here.
+
 **<ins>‼️ Warning: Unaudited Code ‼️</ins>**
 
 **<ins>The smart contracts in this repository are unaudited and are provided for reference and educational purposes only. They have not undergone a formal security audit. Do NOT use this code in a production environment without a thorough professional audit. Use at your own risk.</ins>**
@@ -63,22 +71,19 @@ This project uses the [Foundry](https://github.com/foundry-rs/foundry) developme
 
 ### Setup
 
-1.  **Clone the repository:**
+1.  **Clone the repository with its submodules** (`forge-std` comes in through OpenZeppelin's own submodules):
 ```bash
-git clone https://github.com/xaler5/urwa.git
-cd urwa
+git clone --recursive https://github.com/xaler5/uRWA.git
+cd uRWA
 ```
-2.  **Install dependencies (submodules):**
-```bash
-forge install
-```
+If you already cloned it, run `git submodule update --init --recursive`.
 
 ### Build
 
 Compile the contracts:
 
 ```bash
-yarn build
+forge build
 ```
 
 ### Test
@@ -86,10 +91,14 @@ yarn build
 Run the test suite and coverage:
 
 ```bash
-yarn test
-yarn coverage
+forge test
+forge coverage
 ```
 
-### License
+## Contributing
 
-This project is licensed under the MIT License - see the package.json file for details.
+Issues and PRs are welcome: bug reports, missing conformance cases, extensions, docs. See [CONTRIBUTING.md](CONTRIBUTING.md). Questions about the standard itself are best raised in the [Ethereum Magicians thread](https://ethereum-magicians.org/t/erc-7943-universal-rwa-interface-urwa/23972).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

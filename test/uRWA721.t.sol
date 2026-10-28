@@ -497,6 +497,21 @@ contract uRWA721Test is Test {
         assertFalse(token.canTransfer(user1, user2, NON_EXISTENT_TOKEN_ID));
     }
 
+    function test_CanTransfer_ZeroAddress_IsMintPreflight() public {
+        assertTrue(token.canSend(address(0)));
+        assertTrue(token.canTransfer(address(0), user2, NON_EXISTENT_TOKEN_ID));
+        assertFalse(token.canTransfer(address(0), user2, TOKEN_ID_1)); // already minted
+        assertFalse(token.canTransfer(address(0), nonWhitelistedUser, NON_EXISTENT_TOKEN_ID));
+    }
+
+    function test_CanTransfer_ZeroAddress_IsBurnPreflight() public {
+        assertTrue(token.canReceive(address(0)));
+        assertTrue(token.canTransfer(user1, address(0), TOKEN_ID_1));
+        vm.prank(whitelister);
+        token.changeSendWhitelist(user1, false);
+        assertFalse(token.canTransfer(user1, address(0), TOKEN_ID_1));
+    }
+
     function test_CanTransfer_Fail_FromCannotSend() public {
         vm.prank(whitelister);
         token.changeSendWhitelist(user1, false);
