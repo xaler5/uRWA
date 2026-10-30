@@ -6,8 +6,8 @@ import {uRWA20} from "../../contracts/uRWA20.sol";
 import {IERC7943Fungible} from "../../contracts/interfaces/IERC7943.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
-/// @notice Forwards a call to the token, in the shape of ERC-8226's `IAgentExecutor.execute`.
-/// @dev The mandate check ERC-8226 puts here is left out: it is the executor's gate, and the token does not see it.
+/// @notice A contract operator that forwards a call to the token, as an executor or settlement contract would.
+/// @dev Any check it applies before forwarding is its own gate, and the token does not see it.
 contract ForwardingExecutor {
     function execute(address target, bytes calldata data) external returns (bytes memory result) {
         bool ok;
