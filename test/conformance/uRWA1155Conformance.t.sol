@@ -94,6 +94,23 @@ contract uRWA1155ConformanceTest is Test {
         assertEq(token.balanceOf(bob, ID), 40);
     }
 
+    /// @dev A self-transfer credits each entry back before the next, so a repeated id is checked
+    /// per entry, as in the base standard.
+    function test_Batch_SelfTransferDuplicateIdNothingFrozen() public {
+        vm.prank(alice);
+        token.safeBatchTransferFrom(alice, alice, _pair(ID, ID), _pair(100, 100), "");
+        assertEq(token.balanceOf(alice, ID), 100);
+    }
+
+    function test_Batch_SelfTransferDuplicateIdWithinUnfrozen() public {
+        vm.prank(admin);
+        token.setFrozenTokens(alice, ID, 60);
+        vm.prank(alice);
+        token.safeBatchTransferFrom(alice, alice, _pair(ID, ID), _pair(40, 40), "");
+        assertEq(token.balanceOf(alice, ID), 100);
+        assertEq(token.getFrozenTokens(alice, ID), 60);
+    }
+
     /// @dev A permissioned batch burn with a repeated id reduces the frozen amount by the total excess,
     /// leaving frozen equal to what is left (100 frozen, 60 burned -> 40 balance, 40 frozen).
     function test_Batch_DuplicateIdBurnAdjustsFrozenOnce() public {
